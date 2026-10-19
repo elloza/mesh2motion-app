@@ -1,10 +1,11 @@
 import {
   type Bone,
-  type BufferAttribute,
   type BufferGeometry
 } from 'three'
 
 import { BoneClassifier } from './BoneClassifier.js'
+import { VertexAdjacency } from './VertexAdjacency.js'
+import { SharedPositionLookup } from './SharedPositionLookup.js'
 
 /**
  * Smooths skin weight boundaries between bone influences using vertex adjacency.
@@ -35,8 +36,8 @@ export class WeightSmoother {
    * - Other boundaries get standard single-ring 50/50 blending
    */
   public smooth_bone_weight_boundaries (skin_indices: number[], skin_weights: number[]): void {
-    const adjacency = this.build_vertex_adjacency()
-    const position_to_indices = this.build_position_map()
+    const adjacency = VertexAdjacency.from_geometry(this.geometry)
+    const position_to_indices = new SharedPositionLookup(this.geometry)
 
     // Pass 1: Identify all boundary vertex pairs and classify them
     const boundary_pairs = this.find_boundary_pairs(skin_indices, skin_weights, adjacency)
@@ -60,10 +61,11 @@ export class WeightSmoother {
   private find_boundary_pairs (
     skin_indices: number[],
     skin_weights: number[],
-    adjacency: Array<Set<number>>
+    adjacency: VertexAdjacency
   ): BoundaryPair[] {
     const vertex_count = this.geometry_vertex_count()
-    const visited = new Set<string>()
+    // pair key is lower_index * vertex_count + higher_index, unique per vertex pair
+    const visited = new Set<number>()
     const pairs: BoundaryPair[] = []
 
     for (let i = 0; i < vertex_count; i++) {
@@ -72,13 +74,14 @@ export class WeightSmoother {
       const weight_a = skin_weights[offset_a]
       if (weight_a !== 1.0) continue
 
-      for (const j of adjacency[i]) {
+      for (let k = adjacency.neighbor_start(i); k < adjacency.neighbor_end(i); k++) {
+        const j = adjacency.neighbors[k]
         const offset_b = j * 4
         const bone_b = skin_indices[offset_b]
         const weight_b = skin_weights[offset_b]
         if (bone_a === bone_b || weight_b !== 1.0) continue
 
-        const key = i < j ? `${i},${j}` : `${j},${i}`
+        const key = i < j ? i * vertex_count + j : j * vertex_count + i
         if (visited.has(key)) continue
         visited.add(key)
 
@@ -106,8 +109,8 @@ export class WeightSmoother {
   private apply_torso_smoothing (
     skin_indices: number[],
     skin_weights: number[],
-    adjacency: Array<Set<number>>,
-    position_to_indices: Map<string, number[]>,
+    adjacency: VertexAdjacency,
+    position_to_indices: SharedPositionLookup,
     pairs: BoundaryPair[]
   ): void {
     const torso_pairs = pairs.filter(p => p.smoothing_type === SmoothingType.Torso)
@@ -148,7 +151,8 @@ export class WeightSmoother {
         const offset = vertex_idx * 4
         const primary_bone = skin_indices[offset]
 
-        for (const neighbor of adjacency[vertex_idx]) {
+        for (let k = adjacency.neighbor_start(vertex_idx); k < adjacency.neighbor_end(vertex_idx); k++) {
+          const neighbor = adjacency.neighbors[k]
           if (processed.has(neighbor)) continue
 
           const neighbor_offset = neighbor * 4
@@ -163,7 +167,7 @@ export class WeightSmoother {
           if (other_bone === -1) continue
 
           // Apply tapering blend to this vertex and its shared-position duplicates
-          const shared = this.get_shared_vertices(neighbor, position_to_indices)
+          const shared = position_to_indices.get_shared_vertices(neighbor)
           for (const idx of shared) {
             const off = idx * 4
             skin_indices[off + 0] = neighbor_bone
@@ -193,7 +197,7 @@ export class WeightSmoother {
   private apply_limb_smoothing (
     skin_indices: number[],
     skin_weights: number[],
-    position_to_indices: Map<string, number[]>,
+    position_to_indices: SharedPositionLookup,
     pairs: BoundaryPair[]
   ): void {
     const limb_pairs = pairs.filter(p => p.smoothing_type === SmoothingType.Limb)
@@ -238,7 +242,7 @@ export class WeightSmoother {
   private apply_standard_smoothing (
     skin_indices: number[],
     skin_weights: number[],
-    position_to_indices: Map<string, number[]>,
+    position_to_indices: SharedPositionLookup,
     pairs: BoundaryPair[]
   ): void {
     const standard_pairs = pairs.filter(p => p.smoothing_type === SmoothingType.Standard)
@@ -255,7 +259,7 @@ export class WeightSmoother {
   private blend_vertex_pair (
     skin_indices: number[],
     skin_weights: number[],
-    position_to_indices: Map<string, number[]>,
+    position_to_indices: SharedPositionLookup,
     vertex_a: number,
     vertex_b: number,
     bone_a: number,
@@ -264,7 +268,7 @@ export class WeightSmoother {
   ): void {
     const primary_weight = 1.0 - secondary_weight
 
-    const shared_a = this.get_shared_vertices(vertex_a, position_to_indices)
+    const shared_a = position_to_indices.get_shared_vertices(vertex_a)
     for (const idx of shared_a) {
       const off = idx * 4
       skin_indices[off + 0] = bone_a
@@ -277,7 +281,7 @@ export class WeightSmoother {
       skin_weights[off + 3] = 0
     }
 
-    const shared_b = this.get_shared_vertices(vertex_b, position_to_indices)
+    const shared_b = position_to_indices.get_shared_vertices(vertex_b)
     for (const idx of shared_b) {
       const off = idx * 4
       skin_indices[off + 0] = bone_b
@@ -298,14 +302,14 @@ export class WeightSmoother {
   private blend_single_side (
     skin_indices: number[],
     skin_weights: number[],
-    position_to_indices: Map<string, number[]>,
+    position_to_indices: SharedPositionLookup,
     vertex: number,
     primary_bone: number,
     secondary_bone: number,
     secondary_weight: number
   ): void {
     const primary_weight = 1.0 - secondary_weight
-    const shared = this.get_shared_vertices(vertex, position_to_indices)
+    const shared = position_to_indices.get_shared_vertices(vertex)
     for (const idx of shared) {
       const off = idx * 4
       skin_indices[off + 0] = primary_bone
@@ -346,47 +350,6 @@ export class WeightSmoother {
       return secondary_bone
     }
     return -1
-  }
-
-  private get_shared_vertices (vertex: number, position_to_indices: Map<string, number[]>): number[] {
-    const pos = this.geometry.attributes.position
-    const x = pos.getX(vertex); const y = pos.getY(vertex); const z = pos.getZ(vertex)
-    const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`
-    return position_to_indices.get(key) || [vertex]
-  }
-
-  private build_position_map (): Map<string, number[]> {
-    const vertex_count = this.geometry_vertex_count()
-    const position_to_indices = new Map<string, number[]>()
-    for (let i = 0; i < vertex_count; i++) {
-      const pos = this.geometry.attributes.position
-      const x = pos.getX(i); const y = pos.getY(i); const z = pos.getZ(i)
-      const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`
-      if (!position_to_indices.has(key)) position_to_indices.set(key, [])
-      position_to_indices.get(key)!.push(i)
-    }
-    return position_to_indices
-  }
-
-  /**
-   * Builds a spatial adjacency map for the mesh vertices using geometry's index (faces).
-   * Returns an array of Sets, where each Set contains the indices of neighboring vertices.
-   */
-  private build_vertex_adjacency (): Array<Set<number>> {
-    const vertex_count = this.geometry_vertex_count()
-    const adjacency: Array<Set<number>> = Array.from({ length: vertex_count }, () => new Set<number>())
-
-    const index_attribute: BufferAttribute | null = this.geometry.index
-    if (index_attribute === null) return adjacency
-
-    const indices = index_attribute.array
-    for (let i = 0; i < indices.length; i += 3) {
-      const a = indices[i]; const b = indices[i + 1]; const c = indices[i + 2]
-      adjacency[a].add(b); adjacency[a].add(c)
-      adjacency[b].add(a); adjacency[b].add(c)
-      adjacency[c].add(a); adjacency[c].add(b)
-    }
-    return adjacency
   }
 }
 
