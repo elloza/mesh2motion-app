@@ -231,7 +231,7 @@ export class DOMUtilities {
             </fieldset>
           </div>
 
-          <div class="options-container">
+          <div id="download-export-format-section" class="options-container">
             <span class="download-settings-label">File Format</span>
             <fieldset id="download-export-format-group" class="toggle" aria-label="Export format">
               ${DOMUtilities.get_export_format_options_markup()}
@@ -326,7 +326,12 @@ export class DOMUtilities {
   private static get_export_contents_options_markup (): string {
     const default_export_contents = DOMUtilities.get_default_export_contents()
 
-    return Object.values(ExportContents).map((export_contents) => {
+    // the engine pack ZIP is only wired up for the create page export
+    const export_contents_options = Object.values(ExportContents).filter((export_contents) => {
+      return export_contents !== ExportContents.EnginePack || !DOMUtilities.is_retarget_page()
+    })
+
+    return export_contents_options.map((export_contents) => {
       const option_id = `export-contents-${export_contents}`
       const option_label = DOMUtilities.get_download_option_label(export_contents)
       const is_checked = export_contents === default_export_contents ? ' checked' : ''
@@ -369,7 +374,8 @@ export class DOMUtilities {
       fbx: 'FBX 7.4',
       glb: 'GLB',
       full: 'Default',
-      skeleton: 'Skeleton + Animations'
+      skeleton: 'Skeleton + Animations',
+      'engine-pack': 'Engine Pack (.zip)'
     }
 
     const custom_label = custom_labels[value]

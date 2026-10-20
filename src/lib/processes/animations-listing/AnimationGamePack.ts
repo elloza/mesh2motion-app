@@ -22,6 +22,12 @@ export const game_pack_clip_names_by_skeleton: Partial<Record<SkeletonType, read
   ]
 }
 
+/**
+ * Clips that should loop in a game engine (used for the engine pack README).
+ * The other pack clips play once (jump start, landing, death).
+ */
+export const game_pack_looping_clip_names: readonly string[] = ['Idle_A', 'Walk', 'Sprint', 'NinjaJump_Idle']
+
 export interface GamePackSelection {
   selected_indices: number[]
   missing_clip_names: string[]

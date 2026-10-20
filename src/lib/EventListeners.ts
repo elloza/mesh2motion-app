@@ -7,6 +7,7 @@ import { ModelCleanupUtility } from './processes/load-model/ModelCleanupUtility'
 import { ModelAnalysisReport } from './processes/load-model/ModelAnalysisReport'
 import { DownloadSuccessDialog } from './components/download-success/DownloadSuccessDialog'
 import { ModalDialog } from './ModalDialog.ts'
+import { ExportContents } from './processes/export-to-file/DownloadSettings.ts'
 import { type Bone, type Material, type MeshBasicMaterial, type MeshPhongMaterial, type MeshStandardMaterial } from 'three'
 
 export class EventListeners {
@@ -292,11 +293,28 @@ export class EventListeners {
       const export_selections = this.bootstrap.animations_listing_step.get_animation_export_selections()
 
       this.bootstrap.file_export_step.set_animation_clips_to_export(all_clips, export_selections)
-      void this.bootstrap.file_export_step.export(
-        this.bootstrap.animations_listing_step.active_skinned_meshes(),
-        'exported-model',
-        this.bootstrap.download_settings
-      )
+
+      const is_engine_pack = this.bootstrap.download_settings.export_contents() === ExportContents.EnginePack
+      if (is_engine_pack) {
+        // keep the preview animation from moving the bones while the pack is exported in bind pose
+        this.bootstrap.animations_listing_step.is_animation_update_frozen = true
+      }
+
+      const export_promise = is_engine_pack
+        ? this.bootstrap.file_export_step.export_engine_pack(
+          this.bootstrap.animations_listing_step.active_skinned_meshes(),
+          this.bootstrap.load_model_step.get_source_file_name(),
+          this.bootstrap.download_settings
+        ).finally(() => {
+          this.bootstrap.animations_listing_step.is_animation_update_frozen = false
+        })
+        : this.bootstrap.file_export_step.export(
+          this.bootstrap.animations_listing_step.active_skinned_meshes(),
+          'exported-model',
+          this.bootstrap.download_settings
+        )
+
+      void export_promise
         .then(() => {
           new DownloadSuccessDialog().show()
         })

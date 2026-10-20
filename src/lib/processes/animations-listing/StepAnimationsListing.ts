@@ -168,9 +168,17 @@ export class StepAnimationsListing extends EventTarget {
     return this.animation_mixer
   }
 
+  // while true, the preview animation does not touch the bones (used while exporting
+  // from the bind pose, which takes several async steps)
+  public is_animation_update_frozen: boolean = false
+
   // setup in the bootstrap.ts file and only called if we are actively
   // on this step
   public frame_change (delta_time: number): void {
+    if (this.is_animation_update_frozen) {
+      return
+    }
+
     this.mixer().update(delta_time)
     this.animation_player.update(delta_time)
   }
