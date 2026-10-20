@@ -23,6 +23,15 @@ export class UI {
   dom_auto_align_model_button: HTMLButtonElement | null = null
   dom_analyze_model_link: HTMLButtonElement | null = null
 
+  // optional "optimize for games" controls in the load skeleton step
+  dom_mesh_optimization_controls: HTMLElement | null = null
+  dom_mesh_optimization_stats: HTMLElement | null = null
+  dom_mesh_optimization_target: HTMLSelectElement | null = null
+  dom_mesh_optimization_texture_size: HTMLSelectElement | null = null
+  dom_mesh_optimization_apply_button: HTMLButtonElement | null = null
+  dom_mesh_optimization_revert_button: HTMLButtonElement | null = null
+  dom_mesh_optimization_result: HTMLElement | null = null
+
   dom_load_skeleton_tools: HTMLElement | null = null
   dom_load_skeleton_button: HTMLButtonElement | null = null
   dom_skeleton_edit_tools: HTMLElement | null = null
@@ -162,6 +171,14 @@ export class UI {
     this.dom_reset_model_position_button = document.querySelector('#reset-model-position-button')
     this.dom_auto_align_model_button = document.querySelector('#auto-align-model-button')
     this.dom_analyze_model_link = document.querySelector('#analyze-model-link')
+
+    this.dom_mesh_optimization_controls = document.querySelector('#mesh-optimization-controls')
+    this.dom_mesh_optimization_stats = document.querySelector('#mesh-optimization-stats')
+    this.dom_mesh_optimization_target = document.querySelector('#mesh-optimization-target')
+    this.dom_mesh_optimization_texture_size = document.querySelector('#mesh-optimization-texture-size')
+    this.dom_mesh_optimization_apply_button = document.querySelector('#mesh-optimization-apply-button')
+    this.dom_mesh_optimization_revert_button = document.querySelector('#mesh-optimization-revert-button')
+    this.dom_mesh_optimization_result = document.querySelector('#mesh-optimization-result')
 
     // UI controls for loading/working with skeleton
     this.dom_load_skeleton_tools = document.querySelector('#load-skeleton-tools')

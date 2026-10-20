@@ -12,6 +12,9 @@ import { Utility } from '../../Utilities.ts'
 import { ModelCleanupUtility } from './ModelCleanupUtility.ts'
 import { ModelAnalysisReport, type ModelImportAnalysis, type SceneSnapshot } from './ModelAnalysisReport.ts'
 import { PlatformUtils } from '../../PlatformUtils.ts'
+import { ModelMeshOptimizer, type MeshOptimizationOptions, type MeshOptimizationSummary } from './mesh-optimization/ModelMeshOptimizer.ts'
+import { MeshOptimizationPanel } from './mesh-optimization/MeshOptimizationPanel.ts'
+import { TextureDownscaler } from './mesh-optimization/TextureDownscaler.ts'
 
 // Note: EventTarget is a built-ininterface and do not need to import it
 export class StepLoadModel extends EventTarget {
@@ -52,6 +55,10 @@ export class StepLoadModel extends EventTarget {
   objects_count = 0
 
   private original_geometry_positions: Float32Array[] = []
+
+  // optional "optimize for games" pass (decimation + texture downscaling), which can be reverted
+  private readonly mesh_optimizer = new ModelMeshOptimizer()
+  private readonly mesh_optimization_panel = new MeshOptimizationPanel(this)
 
   /**
    * Skinned mesh data that will be used for retargeting
@@ -145,6 +152,8 @@ export class StepLoadModel extends EventTarget {
       })
     }
 
+    this.mesh_optimization_panel.add_event_listeners()
+
     if (this.ui.dom_load_model_button !== null) {
       this.ui.dom_load_model_button.addEventListener('click', () => {
         // get currently selected option out of the model-selection drop-down
@@ -172,6 +181,7 @@ export class StepLoadModel extends EventTarget {
     this.mesh_has_broken_material = false
     this.preserve_skinned_mesh = false
     this.import_analysis = null
+    this.mesh_optimizer.forget()
   }
 
   public reset_model_position (): void {
@@ -378,6 +388,10 @@ export class StepLoadModel extends EventTarget {
 
     this.import_analysis = this.build_import_analysis(imported_snapshot, this.final_mesh_data)
 
+    // a new model replaces whatever the optimizer was holding for the previous one
+    this.mesh_optimizer.forget()
+    this.mesh_optimization_panel.reset()
+
     this.dispatchEvent(new CustomEvent('modelLoaded'))
   }
 
@@ -433,5 +447,69 @@ export class StepLoadModel extends EventTarget {
 
   public models_material_list (): Material[] {
     return this.material_list
+  }
+
+  /**
+   * Triangles across all loaded meshes, counted from the index when there is one
+   * (triangle_count above assumes non-indexed geometry).
+   */
+  public get_triangle_count (): number {
+    return this.geometry_list.reduce((sum, geometry) => sum + ModelMeshOptimizer.triangle_count(geometry), 0)
+  }
+
+  public get_largest_texture_size (): number {
+    return TextureDownscaler.collect_textures(this.material_list).reduce((largest, texture) => {
+      const { width, height } = TextureDownscaler.image_size(texture.image)
+      return Math.max(largest, width, height)
+    }, 0)
+  }
+
+  public is_mesh_optimized (): boolean {
+    return this.mesh_optimizer.is_optimized()
+  }
+
+  /**
+   * Reduces triangles and/or texture size of the loaded model in place.
+   * Running it again starts over from the original model.
+   */
+  public async optimize_mesh_for_games (options: MeshOptimizationOptions): Promise<MeshOptimizationSummary> {
+    const meshes = this.loaded_meshes()
+    const { import_positions, summary } = await this.mesh_optimizer.apply(meshes, this.original_geometry_positions, options)
+    this.update_after_geometry_swap(meshes, import_positions)
+    return summary
+  }
+
+  /**
+   * Puts the original geometry and textures back, keeping any rotation or move made since.
+   */
+  public revert_mesh_optimization (): void {
+    const meshes = this.loaded_meshes()
+    const import_positions = this.mesh_optimizer.revert(meshes)
+    if (import_positions !== null) {
+      this.update_after_geometry_swap(meshes, import_positions)
+    }
+  }
+
+  private loaded_meshes (): Mesh[] {
+    const meshes: Mesh[] = []
+    this.final_mesh_data.traverse((obj: Object3D) => {
+      if (obj.type === 'Mesh') {
+        meshes.push(obj as Mesh)
+      }
+    })
+    return meshes
+  }
+
+  /**
+   * Keeps the geometry list, the "Reset position" snapshot and the counts in
+   * step with the meshes after their geometry was replaced.
+   */
+  private update_after_geometry_swap (meshes: Mesh[], import_positions: Float32Array[]): void {
+    meshes.forEach((mesh, i) => { this.geometry_list[i] = mesh.geometry })
+    this.original_geometry_positions = import_positions
+
+    const mesh_metrics = ModelCleanupUtility.calculate_mesh_metrics(this.geometry_list)
+    this.vertex_count = mesh_metrics.vertex_count
+    this.triangle_count = mesh_metrics.triangle_count
   }
 }
