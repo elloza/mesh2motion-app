@@ -10,6 +10,7 @@ import { ExportHierarchyService } from '../../lib/processes/export-to-file/Expor
 import { ExportAnimationCleanupService } from '../../lib/processes/export-to-file/ExportAnimationCleanupService'
 import { GlbSkinCleanupService } from '../../lib/processes/export-to-file/GlbSkinCleanupService'
 import { FbxTextureCompatibilityService } from '../../lib/processes/export-to-file/FbxTextureCompatibilityService'
+import { fbx_unit_scale } from '../../lib/processes/export-to-file/FbxUnitScale'
 
 export class StepExportRetargetedAnimations extends EventTarget {
   public animation_clips_to_export: AnimationClip[] = []
@@ -168,6 +169,7 @@ export class StepExportRetargetedAnimations extends EventTarget {
     try {
       const result = await this.fbx_exporter.parseAsync(exported_scene, {
         preset: fbx_export_preset,
+        unitScale: fbx_unit_scale(fbx_export_preset),
         includeAnimations: true,
         animations: animations_to_export,
         onlyVisible: false,
