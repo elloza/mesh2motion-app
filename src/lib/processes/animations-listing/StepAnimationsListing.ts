@@ -21,6 +21,7 @@ import { ModalDialog } from '../../ModalDialog.ts'
 import { type AnimationClipMetadata, type TransformedAnimationClipPair } from './interfaces/TransformedAnimationClipPair.ts'
 import { type AnimationExportSelection } from './interfaces/AnimationExportSelection.ts'
 import { PropsManager } from './props/PropsManager.ts'
+import { type RestPoseCorrections } from '../edit-skeleton/auto-fit/RestPoseCorrection.ts'
 
 // Note: EventTarget is a built-ininterface and do not need to import it
 export class StepAnimationsListing extends EventTarget {
@@ -91,8 +92,9 @@ export class StepAnimationsListing extends EventTarget {
     })
   }
 
-  public begin (skeleton_type: SkeletonType, skeleton_scale: number): void {
+  public begin (skeleton_type: SkeletonType, skeleton_scale: number, rest_pose_corrections: RestPoseCorrections | null = null): void {
     this.skeleton_scale = skeleton_scale
+    this.animation_loader.set_rest_pose_corrections(rest_pose_corrections)
 
     if (this.ui.dom_current_step_element != null) {
       this.ui.dom_current_step_element.innerHTML = 'Test animations'

@@ -5,6 +5,7 @@ import { type SkeletonType } from '../../enums/SkeletonType.ts'
 import { RigConfig } from '../../RigConfig.ts'
 import { type AnimationClipMetadata, type TransformedAnimationClipPair } from './interfaces/TransformedAnimationClipPair.ts'
 import { LoadError, NoAnimationsError } from './AnimationImportErrors.ts'
+import { RestPoseCorrection, type RestPoseCorrections } from '../edit-skeleton/auto-fit/RestPoseCorrection.ts'
 
 export interface AnimationLoadProgress {
   loaded: number
@@ -26,6 +27,17 @@ export class AnimationLoader extends EventTarget {
   private total_files: number = 0
 
   private skeleton_type: SkeletonType | null = null
+
+  // set when Auto Fit changed bone directions compared to the rig template
+  private rest_pose_corrections: RestPoseCorrections | null = null
+
+  /**
+   * Rotation corrections applied to every loaded clip so it moves like on the
+   * rig template (see RestPoseCorrection). null to load clips unchanged.
+   */
+  public set_rest_pose_corrections (corrections: RestPoseCorrections | null): void {
+    this.rest_pose_corrections = corrections
+  }
 
   private create_default_metadata (): AnimationClipMetadata {
     return {
@@ -246,6 +258,10 @@ export class AnimationLoader extends EventTarget {
 
     // Apply skeleton scaling to position keyframes
     AnimationUtility.apply_skeleton_scale_to_position_keyframes(cloned_animations, skeleton_scale)
+
+    if (this.rest_pose_corrections !== null) {
+      RestPoseCorrection.apply_to_clips(cloned_animations, this.rest_pose_corrections)
+    }
 
     // Create the transformed pairs
     return cloned_animations.map(clip => ({
