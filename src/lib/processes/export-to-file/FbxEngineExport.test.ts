@@ -113,7 +113,7 @@ describe('FBX export for engines', () => {
   })
 
   it('knows the settings of each preset', () => {
-    expect(fbx_space_settings(FbxExportPreset.Unreal)).toEqual({ axis_up: 'Y', axis_forward: 'Z', unit_scale: 1, data_scale: 100 })
+    expect(fbx_space_settings(FbxExportPreset.Unreal)).toEqual({ axis_up: 'Y', axis_forward: '-Z', unit_scale: 1, data_scale: 100 })
     expect(fbx_space_settings(FbxExportPreset.Unity)).toEqual({ axis_up: 'Y', axis_forward: 'Z', unit_scale: 100, data_scale: 1 })
   })
 })

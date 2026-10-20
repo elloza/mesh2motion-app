@@ -4,9 +4,10 @@ import { FbxExportPreset } from './DownloadSettings.ts'
 import { AnimationUtility } from '../animations-listing/AnimationUtility.ts'
 
 export interface FbxSpaceSettings {
-  // axes written in GlobalSettings. They describe the data as it is: three.js is Y up, Z forward
+  // axes written in GlobalSettings. three.js data is Y up; the forward axis in the
+  // header decides which way the importer turns the character
   axis_up: 'Y'
-  axis_forward: 'Z'
+  axis_forward: 'Z' | '-Z'
   // GlobalSettings.UnitScaleFactor (centimeters per file unit)
   unit_scale: number
   // factor applied to the exported data (vertices, bone translations, position keys)
@@ -24,11 +25,15 @@ export interface FbxSpaceSettings {
  * imported characters lying down; and meters in the header alone imported them
  * 100x too small.
  *
+ * Unreal characters face +Y (like the UE mannequin). With a Z forward header the
+ * converted character faced -Y, so it looked backwards; declaring -Z forward
+ * makes the importer turn it around without touching the data.
+ *
  * Unity: "Convert Units" is on by default, so meters in the header with data in
  * meters imports at real size.
  */
 const FBX_SPACE_BY_PRESET: Record<FbxExportPreset, FbxSpaceSettings> = {
-  [FbxExportPreset.Unreal]: { axis_up: 'Y', axis_forward: 'Z', unit_scale: 1, data_scale: 100 },
+  [FbxExportPreset.Unreal]: { axis_up: 'Y', axis_forward: '-Z', unit_scale: 1, data_scale: 100 },
   [FbxExportPreset.Unity]: { axis_up: 'Y', axis_forward: 'Z', unit_scale: 100, data_scale: 1 }
 }
 
