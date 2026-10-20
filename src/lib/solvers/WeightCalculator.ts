@@ -64,37 +64,45 @@ export class WeightCalculator {
    * Modifies the skin_indices and skin_weights arrays in place.
    */
   public calculate_median_bone_weights (skin_indices: number[], skin_weights: number[]): void {
-    const vertex_count = this.geometry.attributes.position.array.length / 3
+    const position_attribute = this.geometry.attributes.position
+    const vertex_count = position_attribute.array.length / 3
+
+    // This loop runs vertices x bones times (~54 million checks on a 1.5M triangle
+    // mesh), so everything that does not depend on the vertex is worked out once
+    // up front and kept in flat arrays instead of being re-checked per vertex.
+    const candidates = this.build_closest_bone_candidates()
+    const candidate_count = candidates.bone_indices.length
+
+    // hip bones should have custom logic for distance. If the distance is too far away we should ignore it
+    // This will help with hips when left/right legs could be closer than knee bones
+    const hips_cutoff: number = this.distance_to_bottom_of_position_tracking_bone
 
     for (let i = 0; i < vertex_count; i++) {
-      const vertex_position: Vector3 = new Vector3().fromBufferAttribute(this.geometry.attributes.position, i)
+      const vertex_x: number = position_attribute.getX(i)
+      const vertex_y: number = position_attribute.getY(i)
+      const vertex_z: number = position_attribute.getZ(i)
       let closest_bone_distance: number = 1000 // arbitrary large number to start with
       let closest_bone_index: number = 0
 
-      this.bones.forEach((bone, idx) => {
-        // Skip the root bone (global transform only) and leaf/orientation bones.
-        // See skipped_bone_indices, computed once in initialize_caches.
-        if (this.skipped_bone_indices.has(idx)) {
-          return
+      // if the intersection point is lower than the vertex position, that means the vertex is below
+      // the hips area, and is part of the left or right leg...ignore the hip bones for it
+      const is_below_hips: boolean = hips_cutoff !== null && hips_cutoff < vertex_y
+
+      for (let c = 0; c < candidate_count; c++) {
+        if (is_below_hips && candidates.is_hip_bone[c] === 1) {
+          continue // this vertex is below our crotch area, so it cannot be part of our hips
         }
 
-        // hip bones should have custom logic for distance. If the distance is too far away we should ignore it
-        // This will help with hips when left/right legs could be closer than knee bones
-        if (this.skeleton_type === SkeletonType.Human &&
-          (bone.name.includes('hips') || bone.name.includes('pelvis'))) {
-          // if the intersection point is lower than the vertex position, that means the vertex is below
-          // the hips area, and is part of the left or right leg...ignore that result
-          if (this.distance_to_bottom_of_position_tracking_bone !== null && this.distance_to_bottom_of_position_tracking_bone < vertex_position.y) {
-            return// this vertex is below our crotch area, so it cannot be part of our hips
-          }
-        }
-
-        const distance: number = this.cached_median_child_bone_positions[idx].distanceTo(vertex_position)
+        // same math as Vector3.distanceTo() so results match it exactly
+        const dx: number = candidates.x[c] - vertex_x
+        const dy: number = candidates.y[c] - vertex_y
+        const dz: number = candidates.z[c] - vertex_z
+        const distance: number = Math.sqrt(dx * dx + dy * dy + dz * dz)
         if (distance < closest_bone_distance) {
           closest_bone_distance = distance
-          closest_bone_index = idx
+          closest_bone_index = candidates.bone_indices[c]
         }
-      })
+      }
 
       this.bones_vertex_segmentation[closest_bone_index] ??= [] // Initialize the array if it doesn't exist
       this.bones_vertex_segmentation[closest_bone_index].push(i)
@@ -102,6 +110,40 @@ export class WeightCalculator {
       // assign to final weights. closest bone is always 100% weight
       skin_indices.push(closest_bone_index, 0, 0, 0)
       skin_weights.push(1.0, 0, 0, 0)
+    }
+  }
+
+  /**
+   * The bones a vertex can be assigned to, in bone order, with their midpoint
+   * positions and hip flag unpacked into flat arrays for the per-vertex loop.
+   * Bone order matters: on an exact distance tie the earlier bone wins.
+   */
+  private build_closest_bone_candidates (): ClosestBoneCandidates {
+    const bone_indices: number[] = []
+    const hip_flags: number[] = []
+
+    this.bones.forEach((bone, idx) => {
+      // Skip the root bone (global transform only) and leaf/orientation bones.
+      // See skipped_bone_indices, computed once in initialize_caches.
+      if (this.skipped_bone_indices.has(idx)) {
+        return
+      }
+
+      const is_hip_bone: boolean = this.skeleton_type === SkeletonType.Human &&
+        (bone.name.includes('hips') || bone.name.includes('pelvis'))
+
+      bone_indices.push(idx)
+      hip_flags.push(is_hip_bone ? 1 : 0)
+    })
+
+    const midpoints: Vector3[] = bone_indices.map(idx => this.cached_median_child_bone_positions[idx])
+
+    return {
+      bone_indices: Int32Array.from(bone_indices),
+      is_hip_bone: Uint8Array.from(hip_flags),
+      x: Float64Array.from(midpoints, point => point.x),
+      y: Float64Array.from(midpoints, point => point.y),
+      z: Float64Array.from(midpoints, point => point.z)
     }
   }
 
@@ -158,4 +200,16 @@ export class WeightCalculator {
     // Return null if no intersection is found
     return null
   }
+}
+
+/**
+ * Bones that can receive vertices, stored as parallel flat arrays.
+ * Entry c describes bone bone_indices[c] with its midpoint at (x[c], y[c], z[c]).
+ */
+interface ClosestBoneCandidates {
+  bone_indices: Int32Array
+  is_hip_bone: Uint8Array
+  x: Float64Array
+  y: Float64Array
+  z: Float64Array
 }
