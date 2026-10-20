@@ -139,11 +139,11 @@ describe('StepExportToFile.build_engine_pack_zip', () => {
       'knight.fbx'
     ])
 
-    // character: mesh + skeleton, no animation takes, meters declared
+    // character: mesh + skeleton, no animation takes. Unreal: centimeters, Unity: meters declared
     const character = parse_fbx(await zip.file('knight.fbx')!.async('uint8array'))
     expect(Object.keys(character.Objects.Geometry ?? {}).length).toBe(1)
     expect(animation_stack_names(character)).toEqual([])
-    expect(character.GlobalSettings.UnitScaleFactor.value).toBe(100)
+    expect(character.GlobalSettings.UnitScaleFactor.value).toBe(preset === FbxExportPreset.Unreal ? 1 : 100)
 
     // each animation: skeleton only, exactly its own take
     for (const clip_name of ['Idle_A', 'Sprint', 'Death_A']) {
@@ -167,12 +167,13 @@ describe('StepExportToFile.build_engine_pack_zip', () => {
 
     const character = parse_fbx(await zip.file('knight.fbx')!.async('uint8array'))
     const exported_pelvis = Object.values<FBXNode>(character.Objects.Model).find(model => model.attrName === 'pelvis')
-    expect(exported_pelvis?.Lcl_Translation.value[1]).toBeCloseTo(0.9)
+    // Unreal files are in centimeters
+    expect(exported_pelvis?.Lcl_Translation.value[1]).toBeCloseTo(90)
 
     // the animation files use the same rest pose
     const animation = parse_fbx(await zip.file('Animations/knight_Sprint.fbx')!.async('uint8array'))
     const animation_pelvis = Object.values<FBXNode>(animation.Objects.Model).find(model => model.attrName === 'pelvis')
-    expect(animation_pelvis?.Lcl_Translation.value.map((value: number) => Number(value.toFixed(3)))).toEqual([0, 0.9, 0])
+    expect(animation_pelvis?.Lcl_Translation.value.map((value: number) => Number(value.toFixed(3)))).toEqual([0, 90, 0])
 
     expect(pelvis.position.toArray()).toEqual([0.3, 0.5, 0.1])
     expect(spine.quaternion.equals(animated_spine_quaternion)).toBe(true)

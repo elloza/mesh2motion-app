@@ -145,7 +145,9 @@ export class EnginePackBuilder {
       ...animation_paths.map(path => `  ${path}  skeleton + one animation`),
       has_textures ? '  Textures/  copies of the textures embedded in the character FBX' : '',
       '',
-      'Units are meters (1.8 m character imports at real size). All clips are "in place" (no root motion).',
+      fbx_export_preset === FbxExportPreset.Unreal
+        ? 'Units are centimeters, Y up: Unreal converts it with the default import settings, so the character imports at real size and standing. All clips are "in place" (no root motion).'
+        : 'Units are meters (1.8 m character imports at real size). All clips are "in place" (no root motion).',
       `Looping clips: ${looping_text}.`,
       ''
     ]
@@ -155,7 +157,7 @@ export class EnginePackBuilder {
         'Unreal Engine 5.1',
         `1. Import ${character_file}:`,
         '   - Skeletal Mesh: on. Skeleton: leave empty (a new Skeleton is created).',
-        '   - Import Animations: OFF. Import Uniform Scale: 1.0.',
+        '   - Import Animations: OFF. Import Uniform Scale: 1.0. Leave "Convert Scene" on (default).',
         has_textures ? '   - Materials: Import Textures on. If a texture is missing, import it from Textures/.' : '   - Materials: Import Textures on.',
         '2. Select every file in Animations/ and import them together:',
         `   - Skeleton: ${base_name}_Skeleton (created in step 1). Import Animations: on.`,
