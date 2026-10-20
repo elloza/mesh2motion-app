@@ -5,6 +5,7 @@ import { type AnimationWithState } from './interfaces/AnimationWithState'
 import { type TransformedAnimationClipPair } from './interfaces/TransformedAnimationClipPair'
 import { type AnimationExportSelection, type AnimationMirrorExportMode } from './interfaces/AnimationExportSelection'
 import { AnimationRequestDialog } from '../../components/animation-request/AnimationRequestDialog'
+import { AnimationGamePack } from './AnimationGamePack'
 
 export class AnimationSearch extends EventTarget {
   private all_animations: AnimationWithState[] = []
@@ -488,6 +489,40 @@ export class AnimationSearch extends EventTarget {
       }
     })
     this.dispatchEvent(this.custom_event)
+  }
+
+  /**
+   * Selects exactly the animations whose names match the given clip names and deselects all others.
+   * Used by the "Game Pack" button.
+   * @param clip_names Exact clip names to select
+   * @returns Clip names that do not exist in the listing
+   */
+  public select_only_animations_by_name (clip_names: readonly string[]): string[] {
+    const animation_names = this.all_animations.map(animation => animation.name)
+    const selection = AnimationGamePack.resolve_selection(animation_names, clip_names)
+
+    this.all_animations.forEach((animation, index) => {
+      const is_selected = selection.selected_indices.includes(index)
+      animation.isChecked = is_selected
+
+      // deselected tiles start again from no mirroring, same as unchecking a tile by hand
+      if (!is_selected) {
+        animation.mirror_export_mode = 'none'
+      }
+    })
+
+    // re-render so checkboxes and mirror toggles reflect the new state
+    this.render_filtered_animations(this.filter_input?.value.toLowerCase() ?? '')
+
+    this.custom_event = new CustomEvent('export-options-changed', {
+      detail: {
+        selectedAnimations: this.get_selected_animation_indices(),
+        exportAnimationCount: this.get_selected_export_animation_count()
+      }
+    })
+    this.dispatchEvent(this.custom_event)
+
+    return selection.missing_clip_names
   }
 
   private update_all_checkboxes_in_ui (checked_state: boolean): void {
