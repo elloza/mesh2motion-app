@@ -439,7 +439,11 @@ export class Mesh2MotionEngine {
 
       const active_skeleton_type: SkeletonType = this.load_skeleton_step.skeleton_type()
       // Auto Fit can resize the skeleton after the scale slider, so ask the edit step for the scale to use
-      this.animations_listing_step.begin(active_skeleton_type, this.edit_skeleton_step.animation_position_scale(this.load_skeleton_step.skeleton_scale()))
+      this.animations_listing_step.begin(
+        active_skeleton_type,
+        this.edit_skeleton_step.animation_position_scale(this.load_skeleton_step.skeleton_scale()),
+        this.edit_skeleton_step.animation_rest_pose_corrections()
+      )
 
       // download options for export currently will only work for humanoid skeletons
       // since we will give options to change the bone names to other standard formats.

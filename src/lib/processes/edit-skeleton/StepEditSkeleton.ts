@@ -28,6 +28,7 @@ import { AutoFitPanel } from './auto-fit/AutoFitPanel.ts'
 import { AutoFitPreview } from './auto-fit/AutoFitPreview.ts'
 import { JointPoseApplicator } from './auto-fit/JointPoseApplicator.ts'
 import { JOINED_FINGERS_HINT, rig_has_individual_fingers } from './auto-fit/HandOptionHint.ts'
+import { RestPoseCorrection, type RestPoseCorrections } from './auto-fit/RestPoseCorrection.ts'
 import { type AutoFitResult } from './auto-fit/AutoFitTypes.ts'
 
 /*
@@ -87,6 +88,8 @@ export class StepEditSkeleton extends EventTarget {
   private auto_fit_was_applied: boolean = false
   // distance of the position tracking bone (pelvis) from its parent when the skeleton was loaded
   private loaded_position_bone_offset: number = 0
+  // bone directions of the rig template, to correct animations after Auto Fit
+  private loaded_bone_directions: Map<string, Vector3> = new Map()
 
   constructor () {
     super()
@@ -776,6 +779,7 @@ export class StepEditSkeleton extends EventTarget {
 
     this.auto_fit_was_applied = false
     this.loaded_position_bone_offset = this.position_tracking_bone()?.position.length() ?? 0
+    this.loaded_bone_directions = RestPoseCorrection.child_directions(this.threejs_skeleton)
   }
 
   private position_tracking_bone (): Bone | undefined {
@@ -792,6 +796,19 @@ export class StepEditSkeleton extends EventTarget {
    * the animations would lift the pelvis to the template height.
    * Manual editing keeps the existing behavior.
    */
+  /**
+   * Once Auto Fit has been applied, bones can point differently than in the rig
+   * template (bent forearms, A-pose arms, turned hands). These corrections make
+   * the library animations move them like on the template, instead of keeping
+   * that difference on top of every animation. Computed from the current
+   * skeleton, so later manual tweaks and undo are taken into account.
+   * null when Auto Fit was not applied (manual editing keeps the existing behavior).
+   */
+  public animation_rest_pose_corrections (): RestPoseCorrections | null {
+    if (!this.auto_fit_was_applied) { return null }
+    return RestPoseCorrection.compute(this.loaded_bone_directions, this.threejs_skeleton)
+  }
+
   public animation_position_scale (skeleton_scale: number): number {
     const bone = this.position_tracking_bone()
     if (!this.auto_fit_was_applied || bone === undefined || this.loaded_position_bone_offset <= 1e-6) {
