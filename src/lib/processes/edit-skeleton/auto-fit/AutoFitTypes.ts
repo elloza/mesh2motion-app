@@ -19,19 +19,20 @@ export type AutoFitStatus = 'success' | 'partial' | 'unsupported'
 /**
  * Semantic joints the estimator knows about. These are NOT bone names, the
  * applicator maps them onto whatever bones the loaded rig actually has.
- * Fingers are intentionally not listed: they follow the hand bone.
+ * Individual fingers are not estimated: the finger tip (end of the longest
+ * finger) is only used to orient and size the rig's hand as a whole.
  */
 export type HumanJointId =
   'pelvis' | 'spine_lower' | 'spine_middle' | 'spine_upper' | 'neck' | 'head' | 'head_top' |
-  'clavicle_l' | 'shoulder_l' | 'elbow_l' | 'wrist_l' |
-  'clavicle_r' | 'shoulder_r' | 'elbow_r' | 'wrist_r' |
+  'clavicle_l' | 'shoulder_l' | 'elbow_l' | 'wrist_l' | 'fingertip_l' |
+  'clavicle_r' | 'shoulder_r' | 'elbow_r' | 'wrist_r' | 'fingertip_r' |
   'hip_l' | 'knee_l' | 'ankle_l' | 'ball_l' | 'toe_l' |
   'hip_r' | 'knee_r' | 'ankle_r' | 'ball_r' | 'toe_r'
 
 export const HUMAN_JOINT_IDS: readonly HumanJointId[] = [
   'pelvis', 'spine_lower', 'spine_middle', 'spine_upper', 'neck', 'head', 'head_top',
-  'clavicle_l', 'shoulder_l', 'elbow_l', 'wrist_l',
-  'clavicle_r', 'shoulder_r', 'elbow_r', 'wrist_r',
+  'clavicle_l', 'shoulder_l', 'elbow_l', 'wrist_l', 'fingertip_l',
+  'clavicle_r', 'shoulder_r', 'elbow_r', 'wrist_r', 'fingertip_r',
   'hip_l', 'knee_l', 'ankle_l', 'ball_l', 'toe_l',
   'hip_r', 'knee_r', 'ankle_r', 'ball_r', 'toe_r'
 ]
@@ -54,6 +55,18 @@ export const CRITICAL_JOINT_IDS: readonly HumanJointId[] = [
  * - fallback: body proportions only, there was not enough geometry evidence
  */
 export type JointMethod = 'measured' | 'proportional' | 'mirrored' | 'fallback'
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low'
+
+// below LOW_CONFIDENCE_THRESHOLD a joint is reported as inaccurate in the UI
+export const HIGH_CONFIDENCE_THRESHOLD: number = 0.75
+export const LOW_CONFIDENCE_THRESHOLD: number = 0.45
+
+export function confidence_level (confidence: number): ConfidenceLevel {
+  if (confidence >= HIGH_CONFIDENCE_THRESHOLD) { return 'high' }
+  if (confidence >= LOW_CONFIDENCE_THRESHOLD) { return 'medium' }
+  return 'low'
+}
 
 export interface JointEstimate {
   id: HumanJointId

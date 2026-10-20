@@ -1,0 +1,78 @@
+.auto-fit-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    max-width: 250px;
+}
+
+.auto-fit-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* button styles set a display value, which would override the hidden attribute */
+.auto-fit-container [hidden] {
+    display: none !important;
+}
+
+.auto-fit-container button {
+    white-space: nowrap;
+}
+
+.auto-fit-status {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.auto-fit-status:empty {
+    display: none;
+}
+
+.auto-fit-warnings {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.auto-fit-warnings:empty {
+    display: none;
+}
+
+/* confidence swatches use the same colors as the joint preview in the viewport */
+.auto-fit-confidence {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    margin: 0 0.2rem 0 0.4rem;
+    vertical-align: middle;
+}
+
+.auto-fit-confidence-high { background-color: #4caf50; }
+.auto-fit-confidence-medium { background-color: #ffc107; }
+.auto-fit-confidence-low { background-color: #f44336; }
+
+.auto-fit-options {
+    font-size: 0.85rem;
+}
+
+.auto-fit-options summary {
+    cursor: pointer;
+}
+
+.auto-fit-options-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.3rem 0.5rem;
+    margin-top: 0.3rem;
+}
+
+.auto-fit-options-grid .styled-checkbox {
+    grid-column: 1 / -1;
+}

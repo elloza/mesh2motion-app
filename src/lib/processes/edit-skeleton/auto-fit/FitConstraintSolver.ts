@@ -1,6 +1,7 @@
 import {
   CRITICAL_JOINT_IDS,
   HUMAN_JOINT_IDS,
+  LOW_CONFIDENCE_THRESHOLD,
   type AutoFitOptions,
   type AutoFitStatus,
   type GeometrySnapshot,
@@ -25,7 +26,7 @@ export interface SolverResult {
 }
 
 // joints that come in left/right pairs. The base name gets _l / _r appended
-const PAIRED_JOINTS = ['clavicle', 'shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'ball', 'toe'] as const
+const PAIRED_JOINTS = ['clavicle', 'shoulder', 'elbow', 'wrist', 'fingertip', 'hip', 'knee', 'ankle', 'ball', 'toe'] as const
 
 const LIMB_JOINT_IDS: readonly HumanJointId[] = [
   'elbow_l', 'wrist_l', 'knee_l', 'ankle_l', 'ball_l', 'toe_l',
@@ -44,15 +45,13 @@ const JOINT_LABELS: Record<string, string> = {
   shoulder: 'shoulder',
   elbow: 'elbow',
   wrist: 'wrist',
+  fingertip: 'finger tips',
   hip: 'hip',
   knee: 'knee',
   ankle: 'ankle',
   ball: 'ball of foot',
   toe: 'toes'
 }
-
-// below this the joint is reported as inaccurate in the UI
-export const LOW_CONFIDENCE_THRESHOLD: number = 0.45
 
 /*
  * FitConstraintSolver
@@ -177,8 +176,9 @@ export class FitConstraintSolver {
       )
       require_order(
         lateral(`shoulder_${side}`) < lateral(`elbow_${side}`) && lateral(`elbow_${side}`) < lateral(`wrist_${side}`) &&
+          lateral(`wrist_${side}`) < lateral(`fingertip_${side}`) &&
           y(`elbow_${side}`) <= y(`shoulder_${side}`) + 0.05 * h && y(`wrist_${side}`) <= y(`elbow_${side}`) + 0.05 * h,
-        [`shoulder_${side}`, `elbow_${side}`, `wrist_${side}`],
+        [`shoulder_${side}`, `elbow_${side}`, `wrist_${side}`, `fingertip_${side}`],
         `The ${name} arm joints are out of order.`
       )
 

@@ -68,6 +68,19 @@ export class UI {
   dom_arm_plane_offset_label: HTMLElement | null = null
   dom_arm_plane_setting_container: HTMLElement | null = null
 
+  // auto fit skeleton controls
+  dom_auto_fit_container: HTMLElement | null = null
+  dom_auto_fit_button: HTMLButtonElement | null = null
+  dom_auto_fit_cancel_button: HTMLButtonElement | null = null
+  dom_auto_fit_status: HTMLElement | null = null
+  dom_auto_fit_warnings: HTMLUListElement | null = null
+  dom_auto_fit_review_actions: HTMLElement | null = null
+  dom_auto_fit_apply_button: HTMLButtonElement | null = null
+  dom_auto_fit_discard_button: HTMLButtonElement | null = null
+  dom_auto_fit_pose_select: HTMLSelectElement | null = null
+  dom_auto_fit_facing_select: HTMLSelectElement | null = null
+  dom_auto_fit_symmetry_checkbox: HTMLInputElement | null = null
+
   dom_skinned_mesh_tools: HTMLElement | null = null
   dom_skinned_mesh_animation_tools: HTMLElement | null = null
   dom_back_to_edit_skeleton_button: HTMLButtonElement | null = null
@@ -201,6 +214,19 @@ export class UI {
     this.dom_arm_plane_offset_input = document.querySelector('#arm-plane-offset-input')
     this.dom_arm_plane_offset_label = document.querySelector('#arm-plane-offset-label')
     this.dom_arm_plane_setting_container = document.querySelector('#arm-plane-setting-container')
+
+    // auto fit skeleton controls
+    this.dom_auto_fit_container = document.querySelector('#auto-fit-container')
+    this.dom_auto_fit_button = document.querySelector('#auto-fit-button')
+    this.dom_auto_fit_cancel_button = document.querySelector('#auto-fit-cancel-button')
+    this.dom_auto_fit_status = document.querySelector('#auto-fit-status')
+    this.dom_auto_fit_warnings = document.querySelector('#auto-fit-warnings')
+    this.dom_auto_fit_review_actions = document.querySelector('#auto-fit-review-actions')
+    this.dom_auto_fit_apply_button = document.querySelector('#auto-fit-apply-button')
+    this.dom_auto_fit_discard_button = document.querySelector('#auto-fit-discard-button')
+    this.dom_auto_fit_pose_select = document.querySelector('#auto-fit-pose-select')
+    this.dom_auto_fit_facing_select = document.querySelector('#auto-fit-facing-select')
+    this.dom_auto_fit_symmetry_checkbox = document.querySelector('#auto-fit-symmetry-checkbox')
 
     this.dom_bind_pose_button = document.querySelector('#action_bind_pose')
     // this.dom_scale_skeleton_input_box = document.querySelector('#scale-input')

@@ -23,6 +23,10 @@ import {
 } from 'three'
 import { SkeletonType } from '../../enums/SkeletonType.ts'
 import { RigConfig } from '../../RigConfig.ts'
+import { AutoFitController } from './auto-fit/AutoFitController.ts'
+import { AutoFitPanel } from './auto-fit/AutoFitPanel.ts'
+import { AutoFitPreview } from './auto-fit/AutoFitPreview.ts'
+import { JointPoseApplicator } from './auto-fit/JointPoseApplicator.ts'
 
 /*
  * StepEditSkeleton
@@ -71,10 +75,34 @@ export class StepEditSkeleton extends EventTarget {
   private _current_skeleton_type: SkeletonType | null = null
   private dom_template_image: HTMLElement | null = null
 
+  // Auto Fit Skeleton (human rig only)
+  private readonly auto_fit_controller: AutoFitController = new AutoFitController()
+  private readonly auto_fit_applicator: JointPoseApplicator = new JointPoseApplicator()
+  private readonly auto_fit_preview: AutoFitPreview = new AutoFitPreview(this.joint_texture)
+  private readonly auto_fit_panel: AutoFitPanel
+  private auto_fit_model: Object3D | null = null
+  private auto_fit_model_was_rigged: boolean = false
+  private auto_fit_was_applied: boolean = false
+  // distance of the position tracking bone (pelvis) from its parent when the skeleton was loaded
+  private loaded_position_bone_offset: number = 0
+
   constructor () {
     super()
     this.ui = UI.getInstance()
     this.undo_redo_system = new UndoRedoSystem(50) // Store up to 50 undo states
+    this.auto_fit_panel = new AutoFitPanel({
+      container: this.ui.dom_auto_fit_container,
+      run_button: this.ui.dom_auto_fit_button,
+      cancel_button: this.ui.dom_auto_fit_cancel_button,
+      status: this.ui.dom_auto_fit_status,
+      warnings: this.ui.dom_auto_fit_warnings,
+      review_actions: this.ui.dom_auto_fit_review_actions,
+      apply_button: this.ui.dom_auto_fit_apply_button,
+      discard_button: this.ui.dom_auto_fit_discard_button,
+      pose_select: this.ui.dom_auto_fit_pose_select,
+      facing_select: this.ui.dom_auto_fit_facing_select,
+      symmetry_checkbox: this.ui.dom_auto_fit_symmetry_checkbox
+    })
   }
 
   /**
@@ -136,6 +164,10 @@ export class StepEditSkeleton extends EventTarget {
     }
 
     this.update_skeleton_template_image(skeleton_type)
+
+    // Auto Fit only knows how to fit the human rig
+    this._current_skeleton_type = skeleton_type
+    this.auto_fit_panel.set_visible(skeleton_type === SkeletonType.Human)
 
     // show/hide settings for the head correct depending on if it is checked
     this.show_preview_plane_options()
@@ -553,6 +585,77 @@ export class StepEditSkeleton extends EventTarget {
     this.addEventListener('skeletonTransformed', () => {
       this.refresh_arm_plane_position()
     })
+
+    this.auto_fit_panel.add_event_listeners({
+      on_run: () => { void this.run_auto_fit() },
+      on_cancel: () => { this.auto_fit_controller.cancel() },
+      on_apply: () => { this.apply_auto_fit() },
+      on_discard: () => { this.auto_fit_controller.discard() }
+    })
+
+    this.auto_fit_controller.addEventListener('auto-fit-state-changed', () => {
+      this.refresh_auto_fit_ui()
+    })
+  }
+
+  /**
+   * The model Auto Fit analyzes. Only read, never modified.
+   * @param model_was_rigged the uploaded file already had a skeleton
+   */
+  public set_auto_fit_source (model_root: Object3D, model_was_rigged: boolean): void {
+    if (this.auto_fit_model !== model_root) {
+      this.auto_fit_controller.reset()
+    }
+    this.auto_fit_model = model_root
+    this.auto_fit_model_was_rigged = model_was_rigged
+  }
+
+  private async run_auto_fit (): Promise<void> {
+    if (this.auto_fit_model === null || this._current_skeleton_type !== SkeletonType.Human) {
+      return
+    }
+    await this.auto_fit_controller.run(this.auto_fit_model, this.auto_fit_panel.options(), {
+      model_was_rigged: this.auto_fit_model_was_rigged
+    })
+  }
+
+  /**
+   * Move the skeleton joints to the reviewed Auto Fit proposal as one undo step
+   */
+  public apply_auto_fit (): boolean {
+    const result = this.auto_fit_controller.result()
+    if (!this.auto_fit_controller.can_apply() || result === null) {
+      return false
+    }
+
+    try {
+      // validate before storing the undo state, so a rejected result leaves no trace
+      const plan = this.auto_fit_applicator.plan(this.threejs_skeleton, result)
+      this.store_bone_state_for_undo()
+      this.auto_fit_applicator.apply(this.threejs_skeleton, plan)
+    } catch (error) {
+      console.error('Could not apply Auto Fit', error)
+      const message = error instanceof Error ? error.message : String(error)
+      new ModalDialog('Auto Fit', `The proposal could not be applied, the skeleton was not changed. ${message}`).show()
+      return false
+    }
+
+    this.auto_fit_controller.mark_applied()
+    this.auto_fit_was_applied = true
+    this.dispatchEvent(new CustomEvent('skeletonTransformed'))
+    return true
+  }
+
+  private refresh_auto_fit_ui (): void {
+    const state = this.auto_fit_controller.state()
+    const result = this.auto_fit_controller.result()
+    this.auto_fit_panel.render(state, this.auto_fit_controller.phase(), result, this.auto_fit_controller.error_message())
+
+    if (state === 'preview' && result !== null && this._main_scene_ref !== null) {
+      this.auto_fit_preview.show(this._main_scene_ref, result)
+    } else {
+      this.auto_fit_preview.clear()
+    }
   }
 
   private show_preview_plane_options (): void {
@@ -633,6 +736,10 @@ export class StepEditSkeleton extends EventTarget {
     this.clear_hover_point_if_exists()
     this.remove_preview_plane()
     this.arm_plane_manager.cleanup()
+
+    // drop any running or unapplied Auto Fit proposal. Applied joints stay
+    this.auto_fit_controller.reset()
+    this.auto_fit_preview.clear()
   }
 
   /**
@@ -653,6 +760,31 @@ export class StepEditSkeleton extends EventTarget {
 
     // Initialize the undo/redo system with the skeleton
     this.undo_redo_system.set_skeleton(this.threejs_skeleton)
+
+    this.auto_fit_was_applied = false
+    this.loaded_position_bone_offset = this.position_tracking_bone()?.position.length() ?? 0
+  }
+
+  private position_tracking_bone (): Bone | undefined {
+    const bone_name = RigConfig.by_skeleton_type(SkeletonType.Human)?.position_tracking_bone_name
+    return bone_name === undefined ? undefined : this.threejs_skeleton.bones.find(bone => bone.name === bone_name)
+  }
+
+  /**
+   * Scale for the position keyframes of the animations (the pelvis track).
+   * They are authored for the rig template, and the "Scale skeleton" slider
+   * normally tells how much bigger or smaller this character is. Auto Fit
+   * resizes the skeleton itself, so once it has been applied, the pelvis offset
+   * compared to the loaded skeleton says the real size instead. Without this
+   * the animations would lift the pelvis to the template height.
+   * Manual editing keeps the existing behavior.
+   */
+  public animation_position_scale (skeleton_scale: number): number {
+    const bone = this.position_tracking_bone()
+    if (!this.auto_fit_was_applied || bone === undefined || this.loaded_position_bone_offset <= 1e-6) {
+      return skeleton_scale
+    }
+    return skeleton_scale * bone.position.length() / this.loaded_position_bone_offset
   }
 
   private create_threejs_skeleton_object (): Skeleton {

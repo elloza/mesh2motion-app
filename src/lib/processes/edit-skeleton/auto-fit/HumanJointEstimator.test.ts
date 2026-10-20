@@ -17,10 +17,11 @@ import {
   type SyntheticHumanoid,
   type SyntheticHumanoidOptions
 } from './test-fixtures/SyntheticHumanoid'
+import { read_glb_meshes } from './test-fixtures/GlbMeshReader'
 
 const MAJOR_JOINTS: HumanJointId[] = [
   'pelvis', 'neck', 'head',
-  'shoulder_l', 'elbow_l', 'wrist_l', 'shoulder_r', 'elbow_r', 'wrist_r',
+  'shoulder_l', 'elbow_l', 'wrist_l', 'fingertip_l', 'shoulder_r', 'elbow_r', 'wrist_r', 'fingertip_r',
   'hip_l', 'knee_l', 'ankle_l', 'hip_r', 'knee_r', 'ankle_r'
 ]
 
@@ -108,13 +109,18 @@ describe('HumanJointEstimator', () => {
     expect_accurate(result, humanoid, 0.04, 0.02)
   })
 
-  it('detects the wrist from the flat hand when the hand is open', async () => {
-    const humanoid = build_synthetic_humanoid({ proportions: { ...ADULT_PROPORTIONS, hand_width: 0.09, hand_thickness: 0.012 } })
-    const result = await fit(humanoid)
-    const wrist = result.joints.find(joint => joint.id === 'wrist_l')
+  it('puts the wrist where the arm is narrowest, not in the palm', async () => {
+    for (const proportions of [ADULT_PROPORTIONS, { ...ADULT_PROPORTIONS, hand_width: 0.09, hand_thickness: 0.012 }]) {
+      const humanoid = build_synthetic_humanoid({ proportions })
+      const result = await fit(humanoid)
+      const wrist = joint_position(result, 'wrist_l')
+      const truth = humanoid.truth.wrist_l as Vector3
 
-    expect(wrist?.method).toBe('measured')
-    expect(relative_errors(result, humanoid).get('wrist_l')).toBeLessThan(0.01)
+      expect(result.joints.find(joint => joint.id === 'wrist_l')?.method).toBe('measured')
+      expect(wrist.distanceTo(truth) / humanoid.height).toBeLessThan(0.025)
+      // never past the real wrist, towards the fingers
+      expect(wrist.x).toBeLessThan(truth.x + 0.005 * humanoid.height)
+    }
   })
 
   it('returns confidences between 0 and 1 and is deterministic', async () => {
@@ -146,6 +152,61 @@ describe('HumanJointEstimator', () => {
       }
     })
     expect(after).toEqual(before)
+  })
+
+  it('fits the sample human model shipped with Mesh2Motion (T-pose mannequin)', async () => {
+    const result = await new HumanJointEstimator().estimate(GeometrySampler.sample(read_glb_meshes('static/models/model-human.glb')))
+    const height = result.diagnostics.height as number
+    const at = (id: HumanJointId): Vector3 => joint_position(result, id).divideScalar(height)
+
+    expect(result.status).toBe('success')
+    expect(result.pose).toBe('t-pose')
+    ;(['l', 'r'] as const).forEach((side) => {
+      const sign = side === 'l' ? 1 : -1
+      // laterality and plausible landmarks for this mannequin (heights as a fraction of its height)
+      // the mannequin's forearm is narrowest at x ~ 0.40 of its height
+      expect(at(`wrist_${side}`).x * sign).toBeGreaterThan(0.37)
+      expect(at(`wrist_${side}`).x * sign).toBeLessThan(0.42)
+      expect(at(`shoulder_${side}`).x * sign).toBeGreaterThan(0.06)
+      expect(at(`ankle_${side}`).y).toBeLessThan(0.07)
+      expect(at(`hip_${side}`).y).toBeGreaterThan(0.45)
+      expect(at(`hip_${side}`).y).toBeLessThan(0.58)
+    })
+    // neck_01 at shoulder height, head bone just above the chin, head_leaf inside the head
+    expect(Math.abs(at('neck').y - at('shoulder_l').y)).toBeLessThan(0.02)
+    expect(at('head').y).toBeGreaterThan(0.86)
+    expect(at('head_top').y).toBeGreaterThan(at('head').y)
+    expect(at('head_top').y).toBeLessThan(0.97)
+  })
+
+  it('gives the same skeleton for the T-pose and A-pose versions of the sample mannequin', async () => {
+    // static/test-files/bone-correction-tests/human-a-pose.glb is the same mannequin with the arms lowered
+    const t_pose = await new HumanJointEstimator().estimate(GeometrySampler.sample(read_glb_meshes('static/models/model-human.glb')))
+    const a_pose = await new HumanJointEstimator().estimate(GeometrySampler.sample(read_glb_meshes('static/test-files/bone-correction-tests/human-a-pose.glb')))
+    const height = t_pose.diagnostics.height as number
+
+    expect(a_pose.status).toBe('success')
+    expect(a_pose.pose).toBe('a-pose')
+
+    // nothing but the arms moved, so the rest of the skeleton must match
+    const unchanged: HumanJointId[] = ['pelvis', 'neck', 'head', 'hip_l', 'knee_l', 'ankle_l', 'hip_r', 'knee_r', 'ankle_r']
+    unchanged.forEach((id) => {
+      expect(joint_position(a_pose, id).distanceTo(joint_position(t_pose, id)) / height, id).toBeLessThan(0.02)
+    })
+    // shoulders come from the arm line, which shifts a little (mostly in depth) when the arm is lowered
+    ;(['shoulder_l', 'shoulder_r'] as HumanJointId[]).forEach((id) => {
+      expect(joint_position(a_pose, id).distanceTo(joint_position(t_pose, id)) / height, id).toBeLessThan(0.03)
+    })
+
+    // the arms rotate around the shoulder, so arm lengths should stay close. Not
+    // exact: the A-pose file was posed separately and its forearm deforms a bit
+    const length = (result: AutoFitResult, from: HumanJointId, to: HumanJointId): number =>
+      joint_position(result, from).distanceTo(joint_position(result, to))
+    ;(['l', 'r'] as const).forEach((side) => {
+      const ratio = length(a_pose, `shoulder_${side}`, `wrist_${side}`) / length(t_pose, `shoulder_${side}`, `wrist_${side}`)
+      expect(Math.abs(ratio - 1)).toBeLessThan(0.08)
+      expect(joint_position(a_pose, `wrist_${side}`).y).toBeLessThan(joint_position(a_pose, `elbow_${side}`).y)
+    })
   })
 
   describe('incomplete or unusual models', () => {

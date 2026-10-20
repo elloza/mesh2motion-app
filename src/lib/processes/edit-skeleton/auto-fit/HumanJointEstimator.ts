@@ -32,10 +32,16 @@ const PROPORTIONS = {
   elbow_between_shoulder_and_wrist: 0.54,
   wrist_along_arm: 0.74, // shoulder -> finger tip, used when the wrist can't be measured
   shoulder_below_neck: 0.02, // fraction of height
+  neck_above_shoulder: 0.004, // the rig's neck_01 sits at shoulder height, at the base of the neck
   pelvis_below_hip: 0.009,
   spine: [0.187, 0.417, 0.682], // fractions of pelvis -> neck
-  head_above_neck: 0.1, // fraction of neck -> top of head
-  head_top_above_neck: 0.6,
+  // Mesh2Motion skins each vertex to the bone whose midpoint (bone -> first child)
+  // is closest, so the neck/head weight boundary ends up at
+  // (neck + 2 * head + head_top) / 4. The head bone goes in the middle of the
+  // narrow part of the neck and head_top about a third up the head, which puts
+  // that boundary under the chin: the whole face (jaw, beard) follows the head
+  head_along_neck: 0.5, // fraction of (bottom -> top of the narrow part of the neck)
+  head_top_above_head: 0.36, // fraction of (head bone -> top of head)
   ball_along_foot: 0.65,
   clavicle_along_shoulder: 0.12
 }
@@ -48,6 +54,7 @@ interface ArmAnalysis {
   shoulder: Vector3
   elbow: Vector3
   wrist: Vector3
+  fingertip: Vector3
   elbow_method: JointMethod
   wrist_method: JointMethod
   angle_degrees: number
@@ -186,6 +193,7 @@ class HumanBodyAnalysis {
     const shoulder_y = found_shoulders.length > 0
       ? PointCloudUtils.mean(found_shoulders)
       : neck_low - PROPORTIONS.shoulder_below_neck * this.h
+    this.place_neck(shoulder_y, neck_low)
 
     const hip_y = crotch_y + PROPORTIONS.hip_above_crotch * (shoulder_y - crotch_y)
     SIDES.forEach(([side, sign]) => { this.analyze_leg(side, sign, crotch_y, hip_y) })
@@ -258,8 +266,9 @@ class HumanBodyAnalysis {
 
   /**
    * A neck has to be clearly narrower than the chest, and the head above it
-   * clearly wider than the neck and roughly as tall as it is wide. A headless
-   * torso fails one of these.
+   * wider than the neck and roughly as tall as it is wide. A headless torso
+   * fails one of these. Stylized characters can have thick necks and narrow
+   * heads, so the head/neck ratio is kept loose.
    */
   private detect_head (neck_high: number, neck_half_width: number, chest_half_width: number): void {
     const top = this.frame.top_y
@@ -270,26 +279,44 @@ class HumanBodyAnalysis {
 
     this.parts_found.head =
       neck_half_width < chest_half_width * 0.65 &&
-      head_half_width > neck_half_width * 1.4 &&
+      head_half_width > neck_half_width * 1.2 &&
       head_height > 0.06 * this.h &&
       head_aspect > 0.5 && head_aspect < 2.5
 
     if (!this.parts_found.head) {
       this.warnings.push('No head was detected above the neck.')
+      return
     }
+
+    // A big head right above the shoulders (chibi) is closer to the shoulder
+    // and arm bones than to the head bone in places, so the skinning gives
+    // part of it to the arms. Mesh2Motion already has a fix for that: suggest
+    // it, with the plane at the bottom of the head
+    if (head_half_width > chest_half_width * 0.9 || head_height > 0.25 * this.h) {
+      const plane_height = Math.round(neck_high * 100) / 100
+      this.diagnostics.suggested_head_correction_height = plane_height
+      this.warnings.push(`Large head (chibi proportions): if the arms pull on the head when animating, enable "Use Head Weight Correction" with a height of about ${plane_height.toFixed(2)}.`)
+    }
+  }
+
+  /**
+   * neck_01 starts at the base of the neck, level with the shoulders, like in
+   * the rig template. It is never placed above the narrow part of the neck.
+   */
+  private place_neck (shoulder_y: number, neck_low: number): void {
+    const neck_y = Math.min(shoulder_y + PROPORTIONS.neck_above_shoulder * this.h, neck_low)
+    this.set_joint('neck', new Vector3(this.cx, neck_y, this.core_z_at(neck_y)), this.parts_found.head ? 'measured' : 'fallback')
   }
 
   private place_head (neck_low: number, neck_high: number): void {
     const top = this.frame.top_y
     const head_method: JointMethod = this.parts_found.head ? 'measured' : 'fallback'
 
-    this.set_joint('neck', new Vector3(this.cx, neck_low, this.core_z_at(neck_low)), head_method)
-
-    const head_y = neck_high + PROPORTIONS.head_above_neck * (top - neck_high)
+    const head_y = PointCloudUtils.lerp(neck_low, neck_high, PROPORTIONS.head_along_neck)
     const head_z = this.core_z_at(head_y)
     this.set_joint('head', new Vector3(this.cx, head_y, head_z), head_method)
 
-    const head_top_y = neck_high + PROPORTIONS.head_top_above_neck * (top - neck_high)
+    const head_top_y = head_y + PROPORTIONS.head_top_above_head * (top - head_y)
     this.set_joint('head_top', new Vector3(this.cx, head_top_y, head_z), this.parts_found.head ? 'proportional' : 'fallback')
   }
 
@@ -382,9 +409,18 @@ class HumanBodyAnalysis {
     if (upper_sections.length >= 2) {
       const line_start = upper_sections[0].center
       const line_direction = upper_sections[upper_sections.length - 1].center.clone().sub(line_start).normalize()
-      const t = shoulder_guess.clone().sub(line_start).dot(line_direction)
-      shoulder = line_start.clone().addScaledVector(line_direction, t)
-      // never let the shoulder drift into the middle of the chest
+      if (Math.abs(line_direction.x) > 0.2) {
+        // follow the upper arm line back to the side of the torso. This stays
+        // correct when the arm is rotated down (A-pose)
+        const t = (shoulder_guess.x - line_start.x) / line_direction.x
+        shoulder = line_start.clone().addScaledVector(line_direction, t)
+      } else {
+        // arm almost vertical: closest point of the line to the guess
+        const t = shoulder_guess.clone().sub(line_start).dot(line_direction)
+        shoulder = line_start.clone().addScaledVector(line_direction, t)
+      }
+      // the shoulder can't be above the base of the neck or inside the chest
+      shoulder.y = Math.min(shoulder.y, neck_low)
       if ((shoulder.x - this.cx) * sign < chest_half_width * 0.8) {
         shoulder.x = this.cx + sign * chest_half_width * 0.8
       }
@@ -395,17 +431,7 @@ class HumanBodyAnalysis {
     const s_from_shoulder = (fraction: number): number => shoulder_s + fraction * (1 - shoulder_s)
     const center_at = (s: number): Vector3 => HumanBodyAnalysis.interpolate_sections(valid_sections, s)
 
-    // wrist: the hand is flat, the forearm is round. First flat section going outwards
-    let wrist_s = s_from_shoulder(PROPORTIONS.wrist_along_arm)
-    let wrist_method: JointMethod = 'proportional'
-    const search = valid_sections.filter(section => section.s >= s_from_shoulder(0.58) && section.s <= s_from_shoulder(0.86))
-    for (let k = 0; k + 1 < search.length; k++) {
-      if (search[k].flatness > 1.6 && search[k + 1].flatness > 1.6) {
-        wrist_s = search[k].s - (search[k].s_step / 2)
-        wrist_method = 'measured'
-        break
-      }
-    }
+    const [wrist_s, wrist_method] = this.find_wrist(valid_sections, s_from_shoulder)
     const wrist = center_at(wrist_s)
 
     // elbow: where the centre line clearly bends, else proportional along the
@@ -435,9 +461,54 @@ class HumanBodyAnalysis {
     this.diagnostics[`arm_angle_${side}`] = Math.round(angle_degrees)
     this.parts_found[`arm_${side}`] = true
 
-    const arm: ArmAnalysis = { found: true, shoulder, elbow, wrist, elbow_method, wrist_method, angle_degrees }
+    // the furthest points of the arm are the tips of the longest (middle) finger
+    const arm: ArmAnalysis = { found: true, shoulder, elbow, wrist, fingertip: tip, elbow_method, wrist_method, angle_degrees }
     this.place_arm(side, sign, arm)
     return arm
+  }
+
+  /**
+   * The wrist is the narrowest part of the arm between the forearm and the
+   * (wider) hand. Placing it where the hand starts to look flat is too far out:
+   * that is the middle of the palm, and the palm then gets weighted to the
+   * forearm and twists. Flatness is only a fallback for arms without a clear
+   * narrowing, then plain proportions.
+   */
+  private find_wrist (sections: ArmSection[], s_from_shoulder: (fraction: number) => number): [number, JointMethod] {
+    const spread = sections.map((_, k) => PointCloudUtils.mean(sections.slice(Math.max(0, k - 1), k + 2).map(section => section.major_spread)))
+    const in_range = (k: number, low: number, high: number): boolean => sections[k].s >= s_from_shoulder(low) && sections[k].s <= s_from_shoulder(high)
+
+    let narrowest = -1
+    sections.forEach((_, k) => {
+      if (in_range(k, 0.55, 0.9) && (narrowest === -1 || spread[k] < spread[narrowest])) {
+        narrowest = k
+      }
+    })
+
+    if (narrowest !== -1) {
+      const forearm_peak = Math.max(0, ...sections.map((_, k) => (in_range(k, 0.35, 1) && k < narrowest) ? spread[k] : 0))
+      const hand_peak = Math.max(0, ...sections.map((_, k) => k > narrowest ? spread[k] : 0))
+      if (spread[narrowest] < forearm_peak * 0.85 && spread[narrowest] < hand_peak * 0.8) {
+        // the smoothing pulls the minimum towards the forearm when the hand starts
+        // abruptly, so settle on the narrowest raw section next to it
+        let best = narrowest
+        ;[narrowest - 1, narrowest + 1].forEach((k) => {
+          if (k >= 0 && k < sections.length && sections[k].major_spread < sections[best].major_spread) {
+            best = k
+          }
+        })
+        return [sections[best].s, 'measured']
+      }
+    }
+
+    const search = sections.filter(section => section.s >= s_from_shoulder(0.58) && section.s <= s_from_shoulder(0.86))
+    for (let k = 0; k + 1 < search.length; k++) {
+      if (search[k].flatness > 1.6 && search[k + 1].flatness > 1.6) {
+        return [search[k].s - (search[k].s_step / 2), 'measured']
+      }
+    }
+
+    return [s_from_shoulder(PROPORTIONS.wrist_along_arm), 'proportional']
   }
 
   /**
@@ -496,7 +567,7 @@ class HumanBodyAnalysis {
       const major = trace / 2 + discriminant
       const minor = Math.max(trace / 2 - discriminant, 1e-12)
 
-      return { s: (k + 0.5) * s_step, s_step, center, flatness: Math.sqrt(major / minor) }
+      return { s: (k + 0.5) * s_step, s_step, center, flatness: Math.sqrt(major / minor), major_spread: Math.sqrt(major), minor_spread: Math.sqrt(minor), count: indices.length }
     })
   }
 
@@ -519,7 +590,8 @@ class HumanBodyAnalysis {
     this.warnings.push(`The ${side === 'l' ? 'left' : 'right'} arm was not found. Place its joints manually.`)
     const elbow = shoulder.clone().add(new Vector3(sign * 0.17 * this.h, 0, 0))
     const wrist = elbow.clone().add(new Vector3(sign * 0.15 * this.h, 0, 0))
-    const arm: ArmAnalysis = { found: false, shoulder, elbow, wrist, elbow_method: 'fallback', wrist_method: 'fallback', angle_degrees: NaN }
+    const fingertip = wrist.clone().add(new Vector3(sign * 0.1 * this.h, 0, 0))
+    const arm: ArmAnalysis = { found: false, shoulder, elbow, wrist, fingertip, elbow_method: 'fallback', wrist_method: 'fallback', angle_degrees: NaN }
     this.place_arm(side, sign, arm)
     return arm
   }
@@ -529,6 +601,7 @@ class HumanBodyAnalysis {
     this.set_joint(`shoulder_${side}`, arm.shoulder, shoulder_method)
     this.set_joint(`elbow_${side}`, arm.elbow, arm.elbow_method)
     this.set_joint(`wrist_${side}`, arm.wrist, arm.wrist_method)
+    this.set_joint(`fingertip_${side}`, arm.fingertip, shoulder_method)
 
     // clavicle starts near the middle of the chest, slightly in front of the spine
     const clavicle_y = arm.shoulder.y - 0.012 * this.h
@@ -700,4 +773,7 @@ interface ArmSection {
   s_step: number
   center: Vector3
   flatness: number
+  major_spread: number // standard deviation along the widest direction of the cross section
+  minor_spread: number
+  count: number
 }
