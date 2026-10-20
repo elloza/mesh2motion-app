@@ -16,6 +16,8 @@ import { RigConfig } from '../../RigConfig.ts'
 import { Utility } from '../../Utilities.ts'
 import { type ThemeManager } from '../../ThemeManager.ts'
 import { AnimationSearch } from './AnimationSearch.ts'
+import { AnimationGamePack } from './AnimationGamePack.ts'
+import { ModalDialog } from '../../ModalDialog.ts'
 import { type AnimationClipMetadata, type TransformedAnimationClipPair } from './interfaces/TransformedAnimationClipPair.ts'
 import { type AnimationExportSelection } from './interfaces/AnimationExportSelection.ts'
 import { PropsManager } from './props/PropsManager.ts'
@@ -115,6 +117,7 @@ export class StepAnimationsListing extends EventTarget {
 
     this.skeleton_type = skeleton_type
     this.props_manager.begin(skeleton_type, skeleton_scale)
+    this.update_game_pack_button_visibility()
 
     // if we are navigating back to this step, we don't want to add the event listeners again
     if (!this._added_event_listeners) {
@@ -515,6 +518,7 @@ export class StepAnimationsListing extends EventTarget {
         const target = event.target as HTMLInputElement
         const show_selected_only = target.value === 'selected'
         this.animation_search?.set_show_selected_only(show_selected_only)
+        this.update_filtered_animation_listing_ui()
       })
     })
 
@@ -525,8 +529,50 @@ export class StepAnimationsListing extends EventTarget {
       this.update_download_button_enabled()
     })
 
+    // event listener for the game pack button (selects a predefined set of clips)
+    const game_pack_button = document.querySelector('#select-game-pack-animations')
+    game_pack_button?.addEventListener('click', () => {
+      this.select_game_pack_animations()
+    })
+
     // helps ensure we don't add event listeners multiple times
     this.has_added_event_listeners = true
+  }
+
+  // the game pack is only defined for some skeletons (currently human)
+  private update_game_pack_button_visibility (): void {
+    const game_pack_button = document.querySelector<HTMLButtonElement>('#select-game-pack-animations')
+    if (game_pack_button !== null) {
+      game_pack_button.style.display = AnimationGamePack.is_available_for(this.skeleton_type) ? '' : 'none'
+    }
+  }
+
+  private select_game_pack_animations (): void {
+    if (this.animation_search === null) {
+      return
+    }
+
+    const pack_clip_names = AnimationGamePack.get_clip_names(this.skeleton_type)
+    if (pack_clip_names.length === 0) {
+      return
+    }
+
+    const missing_clip_names = this.animation_search.select_only_animations_by_name(pack_clip_names)
+
+    // switch to the "Selected" view so the user can review the pack before downloading
+    const selected_view_radio = document.querySelector<HTMLInputElement>('#animation-view-selected')
+    if (selected_view_radio !== null) {
+      selected_view_radio.checked = true
+    }
+    this.animation_search.clear_filter()
+    this.animation_search.set_show_selected_only(true)
+    this.update_filtered_animation_listing_ui()
+    this.update_download_button_enabled()
+
+    if (missing_clip_names.length > 0) {
+      console.warn('Game pack clips not found in the animation listing:', missing_clip_names)
+      new ModalDialog('Game Pack', `These clips were not found and were skipped: ${missing_clip_names.join(', ')}`).show()
+    }
   }
 
   // called by ArmExtensionControl whenever the arm extension amount changes
