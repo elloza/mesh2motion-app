@@ -27,6 +27,8 @@ import { AutoFitController } from './auto-fit/AutoFitController.ts'
 import { AutoFitPanel } from './auto-fit/AutoFitPanel.ts'
 import { AutoFitPreview } from './auto-fit/AutoFitPreview.ts'
 import { JointPoseApplicator } from './auto-fit/JointPoseApplicator.ts'
+import { JOINED_FINGERS_HINT, rig_has_individual_fingers } from './auto-fit/HandOptionHint.ts'
+import { type AutoFitResult } from './auto-fit/AutoFitTypes.ts'
 
 /*
  * StepEditSkeleton
@@ -640,10 +642,21 @@ export class StepEditSkeleton extends EventTarget {
       return false
     }
 
+    this.warn_if_fingers_are_joined(result)
     this.auto_fit_controller.mark_applied()
     this.auto_fit_was_applied = true
     this.dispatchEvent(new CustomEvent('skeletonTransformed'))
     return true
+  }
+
+  /**
+   * Generated models often have the fingers joined, which tears the hands on a
+   * rig with a bone per finger. Point to the simpler hand option.
+   */
+  private warn_if_fingers_are_joined (result: AutoFitResult): void {
+    if (rig_has_individual_fingers(this.threejs_skeleton.bones) && !result.warnings.includes(JOINED_FINGERS_HINT)) {
+      result.warnings.push(JOINED_FINGERS_HINT)
+    }
   }
 
   private refresh_auto_fit_ui (): void {
