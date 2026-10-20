@@ -245,6 +245,16 @@ export class DOMUtilities {
             </fieldset>
           </div>
 
+          <div id="download-character-height-section" class="options-container" hidden>
+            <label class="download-settings-label" for="download-character-height">Character height (m)</label>
+            <div class="download-character-height-row">
+              <input type="number" id="download-character-height" min="0.1" max="20" step="0.01" value="1.80" />
+              <button type="button" id="download-character-height-human" class="secondary-button">Human 1.80 m</button>
+              <button type="button" id="download-character-height-model" class="secondary-button">Model size</button>
+            </div>
+            <span id="download-character-height-hint" class="download-settings-hint" aria-live="polite"></span>
+          </div>
+
           <div class="options-container">
             <span class="download-settings-label">Contents</span>
             <fieldset id="download-export-contents-group" class="toggle" aria-label="Export contents">

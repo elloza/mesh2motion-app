@@ -44,6 +44,8 @@ export function fbx_space_settings (preset: FbxExportPreset): FbxSpaceSettings {
 export interface EngineFbxOptions {
   include_animations: boolean
   embed_textures: boolean
+  // extra uniform scale, e.g. to give the character a chosen height (1 = keep)
+  size_factor?: number
 }
 
 /**
@@ -58,8 +60,9 @@ export async function export_fbx_for_engine (
   options: EngineFbxOptions
 ): Promise<Uint8Array> {
   const settings = fbx_space_settings(preset)
-  const restore_scene = scale_scene_for_export(scene, settings.data_scale)
-  const clips = scale_clips_for_export(animations, settings.data_scale)
+  const scale = settings.data_scale * (options.size_factor ?? 1)
+  const restore_scene = scale_scene_for_export(scene, scale)
+  const clips = scale_clips_for_export(animations, scale)
   const previous_scene_animations = scene.animations
   scene.animations = clips
 

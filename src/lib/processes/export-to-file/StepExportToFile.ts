@@ -12,6 +12,7 @@ import { AnimationUtility } from '../animations-listing/AnimationUtility.ts'
 import { type AnimationExportSelection } from '../animations-listing/interfaces/AnimationExportSelection.ts'
 import { FbxTextureCompatibilityService } from './FbxTextureCompatibilityService.ts'
 import { export_fbx_for_engine } from './FbxEngineExport.ts'
+import { character_size_factor, measure_character_height } from './CharacterHeight.ts'
 import { PropsExportFilter } from '../animations-listing/props/PropsExportFilter.ts'
 
 // Note: EventTarget is a built-in interface and do not need to import it
@@ -59,6 +60,8 @@ export class StepExportToFile extends EventTarget {
     // The animation clips still target the bone names, so the selected animations continue
     // to work against the exported skeleton.
     const skeleton_only = download_settings.export_contents() === ExportContents.Skeleton
+    // FBX files get the character height chosen in the download settings
+    const size_factor = character_size_factor(download_settings.character_height(), measure_character_height(skinned_meshes))
 
     return this.with_objects_in_export_scene(
       skinned_meshes,
@@ -74,7 +77,8 @@ export class StepExportToFile extends EventTarget {
           export_clips,
           filename,
           download_settings.export_format(),
-          download_settings.fbx_export_preset()
+          download_settings.fbx_export_preset(),
+          size_factor
         )
       }
     )
@@ -99,7 +103,8 @@ export class StepExportToFile extends EventTarget {
       skinned_meshes,
       base_name,
       download_settings.bone_naming_structure(),
-      download_settings.fbx_export_preset()
+      download_settings.fbx_export_preset(),
+      download_settings.character_height()
     )
     this.save_uint8_array(zip_bytes, EnginePackBuilder.zip_file_name(base_name, download_settings.fbx_export_preset()))
   }
@@ -108,11 +113,15 @@ export class StepExportToFile extends EventTarget {
     skinned_meshes: SkinnedMesh[],
     base_name: string,
     bone_naming_structure: BoneNamingStructure,
-    fbx_export_preset: FbxExportPreset
+    fbx_export_preset: FbxExportPreset,
+    target_height_m: number | null = null
   ): Promise<Uint8Array> {
     if (this.animation_clips_to_export.length === 0) {
       throw new Error('No animation clips added to export')
     }
+
+    // the geometry is the bind pose, so the measured height does not depend on the frame on screen
+    const size_factor = character_size_factor(target_height_m, measure_character_height(skinned_meshes))
 
     // export everything from the bind pose, so the rest pose in every FBX is the
     // edited skeleton pose instead of whatever animation frame is on screen.
@@ -124,7 +133,7 @@ export class StepExportToFile extends EventTarget {
         skinned_meshes, [], bone_naming_structure, false,
         async (export_scene, export_clips) => {
           this.apply_bind_pose(skinned_meshes)
-          return await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset)
+          return await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset, size_factor)
         }
       )
 
@@ -136,7 +145,7 @@ export class StepExportToFile extends EventTarget {
             this.apply_bind_pose(skinned_meshes)
             return {
               clip_name: export_clips[0].name,
-              fbx_bytes: await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset)
+              fbx_bytes: await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset, size_factor)
             }
           }
         )
@@ -251,10 +260,11 @@ export class StepExportToFile extends EventTarget {
     animations_to_export: AnimationClip[],
     file_name: string,
     export_format: ExportFormat,
-    fbx_export_preset: FbxExportPreset
+    fbx_export_preset: FbxExportPreset,
+    size_factor: number = 1
   ): Promise<void> {
     if (export_format === ExportFormat.FBX) {
-      await this.export_fbx(exported_scene, animations_to_export, file_name, fbx_export_preset)
+      await this.export_fbx(exported_scene, animations_to_export, file_name, fbx_export_preset, size_factor)
       return
     }
 
@@ -298,23 +308,26 @@ export class StepExportToFile extends EventTarget {
     exported_scene: Scene,
     animations_to_export: AnimationClip[],
     file_name: string,
-    fbx_export_preset: FbxExportPreset
+    fbx_export_preset: FbxExportPreset,
+    size_factor: number = 1
   ): Promise<void> {
-    const result = await this.create_fbx_bytes(exported_scene, animations_to_export, fbx_export_preset)
+    const result = await this.create_fbx_bytes(exported_scene, animations_to_export, fbx_export_preset, size_factor)
     this.save_uint8_array(result, `${file_name}.fbx`)
   }
 
   private async create_fbx_bytes (
     exported_scene: Scene,
     animations_to_export: AnimationClip[],
-    fbx_export_preset: FbxExportPreset
+    fbx_export_preset: FbxExportPreset,
+    size_factor: number = 1
   ): Promise<Uint8Array> {
     const texture_compatibility_session = new FbxTextureCompatibilityService(exported_scene)
 
     try {
       return await export_fbx_for_engine(this.fbx_exporter, exported_scene, animations_to_export, fbx_export_preset, {
         include_animations: animations_to_export.length > 0,
-        embed_textures: true
+        embed_textures: true,
+        size_factor
       })
     } finally {
       texture_compatibility_session.restore()
