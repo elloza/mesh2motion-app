@@ -11,7 +11,7 @@ import { GlbSkinCleanupService } from './GlbSkinCleanupService.ts'
 import { AnimationUtility } from '../animations-listing/AnimationUtility.ts'
 import { type AnimationExportSelection } from '../animations-listing/interfaces/AnimationExportSelection.ts'
 import { FbxTextureCompatibilityService } from './FbxTextureCompatibilityService.ts'
-import { fbx_unit_scale } from './FbxUnitScale.ts'
+import { export_fbx_for_engine } from './FbxEngineExport.ts'
 import { PropsExportFilter } from '../animations-listing/props/PropsExportFilter.ts'
 
 // Note: EventTarget is a built-in interface and do not need to import it
@@ -309,17 +309,12 @@ export class StepExportToFile extends EventTarget {
     animations_to_export: AnimationClip[],
     fbx_export_preset: FbxExportPreset
   ): Promise<Uint8Array> {
-    exported_scene.animations = animations_to_export
     const texture_compatibility_session = new FbxTextureCompatibilityService(exported_scene)
 
     try {
-      return await this.fbx_exporter.parseAsync(exported_scene, {
-        preset: fbx_export_preset,
-        unitScale: fbx_unit_scale(fbx_export_preset),
-        includeAnimations: animations_to_export.length > 0,
-        animations: animations_to_export,
-        onlyVisible: false,
-        embedTextures: true
+      return await export_fbx_for_engine(this.fbx_exporter, exported_scene, animations_to_export, fbx_export_preset, {
+        include_animations: animations_to_export.length > 0,
+        embed_textures: true
       })
     } finally {
       texture_compatibility_session.restore()

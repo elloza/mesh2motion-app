@@ -10,7 +10,7 @@ import { ExportHierarchyService } from '../../lib/processes/export-to-file/Expor
 import { ExportAnimationCleanupService } from '../../lib/processes/export-to-file/ExportAnimationCleanupService'
 import { GlbSkinCleanupService } from '../../lib/processes/export-to-file/GlbSkinCleanupService'
 import { FbxTextureCompatibilityService } from '../../lib/processes/export-to-file/FbxTextureCompatibilityService'
-import { fbx_unit_scale } from '../../lib/processes/export-to-file/FbxUnitScale'
+import { export_fbx_for_engine } from '../../lib/processes/export-to-file/FbxEngineExport'
 
 export class StepExportRetargetedAnimations extends EventTarget {
   public animation_clips_to_export: AnimationClip[] = []
@@ -163,17 +163,12 @@ export class StepExportRetargetedAnimations extends EventTarget {
     file_name: string,
     fbx_export_preset: FbxExportPreset
   ): Promise<void> {
-    exported_scene.animations = animations_to_export
     const texture_compatibility_session = new FbxTextureCompatibilityService(exported_scene)
 
     try {
-      const result = await this.fbx_exporter.parseAsync(exported_scene, {
-        preset: fbx_export_preset,
-        unitScale: fbx_unit_scale(fbx_export_preset),
-        includeAnimations: true,
-        animations: animations_to_export,
-        onlyVisible: false,
-        embedTextures: true
+      const result = await export_fbx_for_engine(this.fbx_exporter, exported_scene, animations_to_export, fbx_export_preset, {
+        include_animations: true,
+        embed_textures: true
       })
 
       this.save_uint8_array(result, `${file_name}.fbx`)
