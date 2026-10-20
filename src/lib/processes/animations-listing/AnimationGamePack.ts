@@ -12,10 +12,12 @@ export const game_pack_clip_names_by_skeleton: Partial<Record<SkeletonType, read
   [SkeletonType.Human]: [
     'Idle_A', // idle
     'Walk', // walk
-    'Jog', // run (there is no plain "Run" clip. "Sprint" is the faster alternative)
-    'Jump_Start', // jump start
-    'Jump_air', // jump air (in-air loop)
-    'Jump_Land', // jump landing
+    'Sprint', // run (there is no plain "Run" clip. "Jog" is slower, Run_Female / Run_Anime do not loop cleanly)
+    // jump start -> jump air (loop) -> jump landing. The NinjaJump clips chain frame-to-frame.
+    // The Jump_Start / Jump_air / Jump_Land set has a pose jump between Jump_air and Jump_Land
+    'NinjaJump_Start', // jump start
+    'NinjaJump_Idle', // jump air (in-air loop)
+    'NinjaJump_Land', // jump landing (ends close to Idle_A)
     'Death_A' // death (Death_B, Death_C and Death_D also exist)
   ]
 }

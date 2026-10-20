@@ -10,13 +10,14 @@ import { type TransformedAnimationClipPair } from './interfaces/TransformedAnima
 // plus look-alikes that must NOT be picked up by exact matching.
 const human_listing_names: string[] = [
   'Death_A', 'Death_B', 'Idle Hurt', 'Idle_A', 'Idle_Talking', 'Jog', 'Jump_2',
-  'Jump_Land', 'Jump_Start', 'Jump_air', 'Run_Female', 'Sprint', 'Walk', 'Walk_Formal'
+  'Jump_Land', 'Jump_Start', 'Jump_air', 'NinjaJump_Idle', 'NinjaJump_Land', 'NinjaJump_Start',
+  'Run_Female', 'Sprint', 'Walk', 'Walk_Formal'
 ]
 
 describe('AnimationGamePack pack definition', () => {
   it('defines the 7 human game clips', () => {
     expect(AnimationGamePack.get_clip_names(SkeletonType.Human)).toEqual([
-      'Idle_A', 'Walk', 'Jog', 'Jump_Start', 'Jump_air', 'Jump_Land', 'Death_A'
+      'Idle_A', 'Walk', 'Sprint', 'NinjaJump_Start', 'NinjaJump_Idle', 'NinjaJump_Land', 'Death_A'
     ])
   })
 
