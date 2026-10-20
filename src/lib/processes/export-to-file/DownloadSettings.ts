@@ -7,7 +7,9 @@ export enum BoneNamingStructure {
 
 export enum ExportContents {
   Full = 'full',
-  Skeleton = 'skeleton'
+  Skeleton = 'skeleton',
+  // fork-only: ZIP for Unreal / Unity (always FBX), see EnginePackBuilder
+  EnginePack = 'engine-pack'
 }
 
 export enum ExportFormat {
@@ -35,6 +37,7 @@ export class DownloadSettings extends EventTarget {
   private dom_bone_naming_group: HTMLElement | null = null
   private dom_export_contents_group: HTMLElement | null = null
   private dom_export_format_group: HTMLElement | null = null
+  private dom_export_format_section: HTMLElement | null = null
   private dom_fbx_preset_section: HTMLElement | null = null
   private dom_fbx_preset_group: HTMLElement | null = null
 
@@ -96,6 +99,7 @@ export class DownloadSettings extends EventTarget {
     this.dom_bone_naming_group = document.querySelector('#download-bone-naming-group')
     this.dom_export_contents_group = document.querySelector('#download-export-contents-group')
     this.dom_export_format_group = document.querySelector('#download-export-format-group')
+    this.dom_export_format_section = document.querySelector('#download-export-format-section')
     this.dom_fbx_preset_section = document.querySelector('#download-fbx-preset-section')
     this.dom_fbx_preset_group = document.querySelector('#download-fbx-preset-group')
   }
@@ -160,6 +164,8 @@ export class DownloadSettings extends EventTarget {
       this.dispatchEvent(new CustomEvent('export-contents-changed', {
         detail: { exportContents: this.selected_export_contents }
       }))
+
+      this.update_fbx_preset_ui_visibility()
     })
 
     this.dom_export_format_group?.addEventListener('change', (event: Event) => {
@@ -206,8 +212,14 @@ export class DownloadSettings extends EventTarget {
       return
     }
 
-    const should_show_fbx_preset = this.selected_export_format === ExportFormat.FBX
+    // the engine pack is always FBX, so it needs the preset but not the format choice
+    const is_engine_pack = this.selected_export_contents === ExportContents.EnginePack
+    const should_show_fbx_preset = this.selected_export_format === ExportFormat.FBX || is_engine_pack
     this.dom_fbx_preset_section.hidden = !should_show_fbx_preset
+
+    if (this.dom_export_format_section !== null) {
+      this.dom_export_format_section.hidden = is_engine_pack
+    }
   }
 
   private set_popup_visibility (is_visible: boolean): void {

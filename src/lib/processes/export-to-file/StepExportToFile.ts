@@ -1,8 +1,9 @@
 import { UI } from '../../UI.ts'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
 import { FBXExporter } from '@comfyorg/fbx-exporter-three'
-import { type AnimationClip, Scene, type SkinnedMesh, type Object3D } from 'three'
-import { type DownloadSettings, ExportContents, ExportFormat, type FbxExportPreset } from './DownloadSettings.ts'
+import { type AnimationClip, Scene, type SkinnedMesh, type Object3D, type Bone, type Quaternion, type Vector3 } from 'three'
+import { type BoneNamingStructure, type DownloadSettings, ExportContents, ExportFormat, type FbxExportPreset } from './DownloadSettings.ts'
+import { EnginePackBuilder, type EnginePackAnimationFile } from './EnginePackBuilder.ts'
 import { ExportBoneNamingService } from './ExportBoneNamingService.ts'
 import { ExportHierarchyService } from './ExportHierarchyService.ts'
 import { ExportAnimationCleanupService } from './ExportAnimationCleanupService.ts'
@@ -44,7 +45,7 @@ export class StepExportToFile extends EventTarget {
   }
 
   public export (
-    skinned_meshes: SkinnedMesh[], 
+    skinned_meshes: SkinnedMesh[],
     filename: string = 'exported_model',
     download_settings: DownloadSettings): Promise<void> {
 
@@ -53,9 +54,115 @@ export class StepExportToFile extends EventTarget {
       return Promise.reject(new Error('No animation clips added to export'))
     }
 
+    // "Skeleton only" exports just the bone hierarchy (the root bone subtree that hangs off
+    // each skinned mesh) instead of the full skinned mesh, which excludes the mesh geometry.
+    // The animation clips still target the bone names, so the selected animations continue
+    // to work against the exported skeleton.
+    const skeleton_only = download_settings.export_contents() === ExportContents.Skeleton
+
+    return this.with_objects_in_export_scene(
+      skinned_meshes,
+      this.animation_clips_to_export,
+      download_settings.bone_naming_structure(),
+      skeleton_only,
+      async (export_scene, export_clips) => {
+        console.log('SKINNED MESH DATA TO EXPORT:', skinned_meshes)
+        console.log('animations to export', export_clips)
+
+        await this.export_scene(
+          export_scene,
+          export_clips,
+          filename,
+          download_settings.export_format(),
+          download_settings.fbx_export_preset()
+        )
+      }
+    )
+      .catch((error) => {
+        console.log('Error exporting file:', error)
+        throw error
+      })
+  }
+
+  /**
+   * Fork-only "Engine Pack": a ZIP for Unreal / Unity with the character FBX (no animations),
+   * one skeleton-only FBX per selected clip, the textures as loose files and a README.
+   * Always FBX, using the FBX preset and bone naming chosen in the download settings.
+   */
+  public async export_engine_pack (
+    skinned_meshes: SkinnedMesh[],
+    source_file_name: string,
+    download_settings: DownloadSettings
+  ): Promise<void> {
+    const base_name = EnginePackBuilder.base_name_from_source_file(source_file_name)
+    const zip_bytes = await this.build_engine_pack_zip(
+      skinned_meshes,
+      base_name,
+      download_settings.bone_naming_structure(),
+      download_settings.fbx_export_preset()
+    )
+    this.save_uint8_array(zip_bytes, EnginePackBuilder.zip_file_name(base_name, download_settings.fbx_export_preset()))
+  }
+
+  public async build_engine_pack_zip (
+    skinned_meshes: SkinnedMesh[],
+    base_name: string,
+    bone_naming_structure: BoneNamingStructure,
+    fbx_export_preset: FbxExportPreset
+  ): Promise<Uint8Array> {
+    if (this.animation_clips_to_export.length === 0) {
+      throw new Error('No animation clips added to export')
+    }
+
+    // export everything from the bind pose, so the rest pose in every FBX is the
+    // edited skeleton pose instead of whatever animation frame is on screen.
+    // The pose is applied again right before each file, in case anything moved the bones in between.
+    const restore_bone_transforms = this.save_bone_transforms(skinned_meshes)
+
+    try {
+      const character_fbx_bytes = await this.with_objects_in_export_scene(
+        skinned_meshes, [], bone_naming_structure, false,
+        async (export_scene, export_clips) => {
+          this.apply_bind_pose(skinned_meshes)
+          return await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset)
+        }
+      )
+
+      const animation_files: EnginePackAnimationFile[] = []
+      for (const clip of this.animation_clips_to_export) {
+        const animation_file = await this.with_objects_in_export_scene(
+          skinned_meshes, [clip], bone_naming_structure, true,
+          async (export_scene, export_clips) => {
+            this.apply_bind_pose(skinned_meshes)
+            return {
+              clip_name: export_clips[0].name,
+              fbx_bytes: await this.create_fbx_bytes(export_scene, export_clips, fbx_export_preset)
+            }
+          }
+        )
+        animation_files.push(animation_file)
+      }
+
+      return await EnginePackBuilder.build_zip({ base_name, fbx_export_preset, character_fbx_bytes, animation_files })
+    } finally {
+      restore_bone_transforms()
+    }
+  }
+
+  /**
+   * Prepares the objects and clips for an export, runs it, and always puts everything back:
+   * bone names, props and the original parents of the moved objects.
+   */
+  private async with_objects_in_export_scene<T> (
+    skinned_meshes: SkinnedMesh[],
+    clips: AnimationClip[],
+    bone_naming_structure: BoneNamingStructure,
+    skeleton_only: boolean,
+    run_export: (export_scene: Scene, export_clips: AnimationClip[]) => Promise<T>
+  ): Promise<T> {
     const export_scene = new Scene()
 
-    const export_clips = this.animation_clips_to_export.map((clip) => {
+    const export_clips = clips.map((clip) => {
       const cloned_clip = clip.clone()
       // Make action names consistent by replacing any whitespace with underscores
       cloned_clip.name = cloned_clip.name.replace(/\s+/g, '_')
@@ -67,14 +174,9 @@ export class StepExportToFile extends EventTarget {
     const restore_bone_names = ExportBoneNamingService.apply_download_settings(
       skinned_meshes,
       export_clips,
-      download_settings.bone_naming_structure()
+      bone_naming_structure
     )
 
-    // "Skeleton only" exports just the bone hierarchy (the root bone subtree that hangs off
-    // each skinned mesh) instead of the full skinned mesh, which excludes the mesh geometry.
-    // The animation clips still target the bone names, so the selected animations continue
-    // to work against the exported skeleton.
-    const skeleton_only = download_settings.export_contents() === ExportContents.Skeleton
     const objects_to_export: Object3D[] = ExportHierarchyService.collect_objects_to_export(skinned_meshes, skeleton_only)
     const restore_props = skeleton_only ? PropsExportFilter.detach_props(objects_to_export) : () => {}
 
@@ -95,40 +197,53 @@ export class StepExportToFile extends EventTarget {
       export_scene.add(object_to_export)
     })
 
-    console.log('SKINNED MESH DATA TO EXPORT:', skinned_meshes)
-    console.log('animations to export', export_clips)
-
-    return this.export_scene(
-      export_scene,
-      export_clips,
-      filename,
-      download_settings.export_format(),
-      download_settings.fbx_export_preset()
-    )
-      .then(() => {
-        // Move the exported objects back to their original parents
-        objects_to_export.forEach((exported_object) => {
-          const original_par = original_parents.get(exported_object)
-          if (original_par != null) {
-            original_par.add(exported_object)
-          } else {
-            // If there was no original parent, remove it from the scene
-            export_scene.remove(exported_object)
-            console.log('ERROR: No original parent found for exported object when exporting and re-parenting to original scene')
-          }
-        })
-
-        restore_props()
-        restore_bone_names()
+    try {
+      return await run_export(export_scene, export_clips)
+    } finally {
+      // Move the exported objects back to their original parents
+      objects_to_export.forEach((exported_object) => {
+        const original_par = original_parents.get(exported_object)
+        if (original_par != null) {
+          original_par.add(exported_object)
+        } else {
+          // If there was no original parent, remove it from the scene
+          export_scene.remove(exported_object)
+          console.log('ERROR: No original parent found for exported object when exporting and re-parenting to original scene')
+        }
       })
-      .catch((error) => {
-        console.log('Error exporting file:', error)
 
-        restore_props()
-        restore_bone_names()
+      restore_props()
+      restore_bone_names()
+    }
+  }
 
-        throw error
+  private apply_bind_pose (skinned_meshes: SkinnedMesh[]): void {
+    skinned_meshes.forEach((skinned_mesh) => {
+      skinned_mesh.skeleton.pose()
+    })
+  }
+
+  /**
+   * Saves the current local transform of every bone and returns a function that restores it.
+   */
+  private save_bone_transforms (skinned_meshes: SkinnedMesh[]): () => void {
+    const saved_transforms = new Map<Bone, { position: Vector3, quaternion: Quaternion, scale: Vector3 }>()
+
+    skinned_meshes.forEach((skinned_mesh) => {
+      skinned_mesh.skeleton.bones.forEach((bone) => {
+        if (bone !== undefined && bone !== null && !saved_transforms.has(bone)) {
+          saved_transforms.set(bone, { position: bone.position.clone(), quaternion: bone.quaternion.clone(), scale: bone.scale.clone() })
+        }
       })
+    })
+
+    return () => {
+      saved_transforms.forEach((transform, bone) => {
+        bone.position.copy(transform.position)
+        bone.quaternion.copy(transform.quaternion)
+        bone.scale.copy(transform.scale)
+      })
+    }
   }
 
   public async export_scene (
@@ -185,20 +300,27 @@ export class StepExportToFile extends EventTarget {
     file_name: string,
     fbx_export_preset: FbxExportPreset
   ): Promise<void> {
+    const result = await this.create_fbx_bytes(exported_scene, animations_to_export, fbx_export_preset)
+    this.save_uint8_array(result, `${file_name}.fbx`)
+  }
+
+  private async create_fbx_bytes (
+    exported_scene: Scene,
+    animations_to_export: AnimationClip[],
+    fbx_export_preset: FbxExportPreset
+  ): Promise<Uint8Array> {
     exported_scene.animations = animations_to_export
     const texture_compatibility_session = new FbxTextureCompatibilityService(exported_scene)
 
     try {
-      const result = await this.fbx_exporter.parseAsync(exported_scene, {
+      return await this.fbx_exporter.parseAsync(exported_scene, {
         preset: fbx_export_preset,
         unitScale: fbx_unit_scale(fbx_export_preset),
-        includeAnimations: true,
+        includeAnimations: animations_to_export.length > 0,
         animations: animations_to_export,
         onlyVisible: false,
         embedTextures: true
       })
-
-      this.save_uint8_array(result, `${file_name}.fbx`)
     } finally {
       texture_compatibility_session.restore()
       exported_scene.animations = []

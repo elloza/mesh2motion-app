@@ -381,6 +381,11 @@ export class StepLoadModel extends EventTarget {
     this.dispatchEvent(new CustomEvent('modelLoaded'))
   }
 
+  // name of the uploaded or selected model file, e.g. "hero.glb"
+  public get_source_file_name (): string {
+    return this.source_file_name
+  }
+
   private build_import_analysis (imported_snapshot: SceneSnapshot, processed_scene: Scene): ModelImportAnalysis {
     return {
       source_name: this.source_file_name,
