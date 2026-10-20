@@ -10,6 +10,7 @@ import { GlbSkinCleanupService } from './GlbSkinCleanupService.ts'
 import { AnimationUtility } from '../animations-listing/AnimationUtility.ts'
 import { type AnimationExportSelection } from '../animations-listing/interfaces/AnimationExportSelection.ts'
 import { FbxTextureCompatibilityService } from './FbxTextureCompatibilityService.ts'
+import { fbx_unit_scale } from './FbxUnitScale.ts'
 import { PropsExportFilter } from '../animations-listing/props/PropsExportFilter.ts'
 
 // Note: EventTarget is a built-in interface and do not need to import it
@@ -190,6 +191,7 @@ export class StepExportToFile extends EventTarget {
     try {
       const result = await this.fbx_exporter.parseAsync(exported_scene, {
         preset: fbx_export_preset,
+        unitScale: fbx_unit_scale(fbx_export_preset),
         includeAnimations: true,
         animations: animations_to_export,
         onlyVisible: false,
