@@ -7,6 +7,7 @@ import { ArmPlaneManager } from './ArmPlaneManager.ts'
 import { ArmWeightCorrector } from '../../solvers/ArmWeightCorrector.ts'
 import { IndependentBoneMovement } from './IndependentBoneMovement.ts'
 import { ModalDialog } from '../../ModalDialog.ts'
+import { public_asset_url } from '../../PublicAssetUrl.ts'
 import {
   Vector3,
   Euler,
@@ -67,7 +68,7 @@ export class StepEditSkeleton extends EventTarget {
   private enable_arm_plane_correction: boolean = false
   private arm_plane_offset: number = 0.0
 
-  private readonly joint_texture = new TextureLoader().load('/images/skeleton-joint-point.png')
+  private readonly joint_texture = new TextureLoader().load(public_asset_url('images/skeleton-joint-point.png'))
 
   private _added_event_listeners: boolean = false
   private readonly preview_plane_manager: PreviewPlaneManager = PreviewPlaneManager.getInstance()

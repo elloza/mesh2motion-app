@@ -4,6 +4,7 @@ import tippy from 'tippy.js'
 import { RigConfig, type ModelVariation, type RigConfigEntry } from '../../RigConfig'
 import { type SkeletonType } from '../../enums/SkeletonType'
 import { VariationLicenseCatalog } from '../../VariationLicenseInfo'
+import { public_asset_url } from '../../PublicAssetUrl'
 
 /**
  * Manages the model variation selection on the "Explore" page.
@@ -89,7 +90,7 @@ export class ModelVariationSwitcher extends EventTarget {
 
     // update image properties
     if (this.dom_info_image !== null) {
-      this.dom_info_image.src = '../' + this.confirmed_variation.preview_image
+      this.dom_info_image.src = public_asset_url(this.confirmed_variation.preview_image)
       this.dom_info_image.alt = this.confirmed_variation.display_name
       this.dom_info_image.style.display = ''
     }
@@ -146,7 +147,7 @@ export class ModelVariationSwitcher extends EventTarget {
       card.className = 'variation-card'
 
       const img = document.createElement('img')
-      img.src =  '../' + variation.preview_image
+      img.src =  public_asset_url(variation.preview_image)
       img.alt = variation.display_name
       img.className = 'variation-preview-image'
       card.appendChild(img)
@@ -233,7 +234,7 @@ export class ModelVariationSwitcher extends EventTarget {
     this.show_loading_progress()
 
     this.loader.load(
-      '../' + model_file,
+      public_asset_url(model_file),
       (gltf) => {
         this.hide_loading_progress()
         this.hide_dialog()

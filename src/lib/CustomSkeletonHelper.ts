@@ -6,6 +6,7 @@
 import { Color, Matrix4, Quaternion, Vector3, Points, PointsMaterial, BufferGeometry, Float32BufferAttribute, InstancedBufferAttribute, TextureLoader, InstancedMesh, MeshBasicMaterial, FrontSide, DynamicDrawUsage, type Bone, type Camera, type ColorRepresentation, type Material, type Texture } from 'three'
 import { BoneCategory, BoneClassifier } from './solvers/BoneClassifier'
 import { create_octahedral_bone_geometry } from './geometry/OctahedralBoneGeometry'
+import { public_asset_url } from './PublicAssetUrl'
 
 const _vector = /*@__PURE__*/ new Vector3()
 const _boneMatrix = /*@__PURE__*/ new Matrix4()
@@ -50,7 +51,7 @@ const bone_category_colors: Record<BoneCategory, number> = {
 let shared_joint_texture: Texture | undefined
 
 function get_joint_texture (): Texture {
-  shared_joint_texture ??= new TextureLoader().load('/images/skeleton-joint-point.png')
+  shared_joint_texture ??= new TextureLoader().load(public_asset_url('images/skeleton-joint-point.png'))
   return shared_joint_texture
 }
 

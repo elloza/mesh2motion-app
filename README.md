@@ -1,5 +1,32 @@
 <img src="./mesh2motion.svg" alt="Mesh2Motion Logo" width="400"/>
 
+> [!NOTE]
+> **This is a fork of [Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app)** (the "Auto-Fit Rig" fork).
+> All credit for Mesh2Motion goes to its creator **Scott Petrovic** and the
+> [Mesh2Motion contributors](https://github.com/Mesh2Motion/mesh2motion-app/graphs/contributors).
+> For the official app use https://app.mesh2motion.org/. This fork adds experimental features on top of it.
+>
+> **Try this fork live:** https://elloza.github.io/mesh2motion-app/create.html
+
+### What this fork adds
+
+- **Auto Fit Skeleton** (Create → Human → Position Joints). Fits the human rig to an A-pose or T-pose model in the browser. It shows a confidence score for each joint, lets you correct the result by hand and undo it in one step. It also corrects the animations' rest pose so the arms do not look contracted.
+- **Faster binding for dense meshes**, such as 50K+ triangle AI-generated characters.
+- **Optimize for games**: reduce triangles and texture size before rigging.
+- **FBX export that works in game engines**:
+  - Unreal preset: Y up, centimeters, the character faces +Y like the UE mannequin.
+  - Unity preset: meters.
+  - Choose the character height at export (1.80 m by default).
+- **Engine pack ZIP**: the character plus a set of animations ready to import into Unreal or Unity.
+- **Export progress indicator**, which replaces the post-download rating dialog.
+- **GitHub Pages deployment** of this fork (`.github/workflows/deploy-pages.yml`).
+
+The Unreal export has been tested in Unreal Engine 5.1. The Unity export has not been tested yet.
+
+Everything below is the original Mesh2Motion README.
+
+---
+
 <table>
   <tr>
     <td><h4>Discord<h4></td>

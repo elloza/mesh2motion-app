@@ -1,5 +1,6 @@
 import { type AnimationClip, type AnimationAction } from 'three'
 import { UI } from '../../UI'
+import { public_asset_url } from '../../PublicAssetUrl'
 
 export class AnimationPlayer {
   private readonly ui: UI
@@ -175,10 +176,10 @@ export class AnimationPlayer {
     if (icon !== null) {
       // swap the img src based on play/pause state
       if (this.is_playing || this.was_playing_before_user_scrubbed) {
-        icon.src = '../images/icons/pause.svg'
+        icon.src = public_asset_url('images/icons/pause.svg')
         icon.alt = 'Pause'
       } else {
-        icon.src = '../images/icons/play.svg'
+        icon.src = public_asset_url('images/icons/play.svg')
         icon.alt = 'Play'
       }
     }

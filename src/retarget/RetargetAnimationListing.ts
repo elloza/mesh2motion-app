@@ -12,6 +12,7 @@ import { UI } from '../lib/UI.ts'
 import { SkeletonType } from '../lib/enums/SkeletonType.ts'
 import { DownloadSettings } from '../lib/processes/export-to-file/DownloadSettings.ts'
 import { ModalDialog } from '../lib/ModalDialog.ts'
+import { public_asset_url } from '../lib/PublicAssetUrl.ts'
 
 /**
  * RetargetAnimationListing - Handles animation listing and playback specifically for retargeting workflow
@@ -118,7 +119,7 @@ export class RetargetAnimationListing extends EventTarget {
   }
 
   public load_and_apply_default_animation_to_skinned_mesh (): void {
-    this.animation_loader.set_animations_file_path('../../animations/')
+    this.animation_loader.set_animations_file_path(public_asset_url('animations/'))
     this.animation_clips_loaded = []
     this.animation_mixer = new AnimationMixer(new Object3D())
 

@@ -6,6 +6,7 @@ import { type TransformedAnimationClipPair } from './interfaces/TransformedAnima
 import { type AnimationExportSelection, type AnimationMirrorExportMode } from './interfaces/AnimationExportSelection'
 import { AnimationRequestDialog } from '../../components/animation-request/AnimationRequestDialog'
 import { AnimationGamePack } from './AnimationGamePack'
+import { public_asset_url } from '../../PublicAssetUrl'
 
 export class AnimationSearch extends EventTarget {
   private all_animations: AnimationWithState[] = []
@@ -22,9 +23,9 @@ export class AnimationSearch extends EventTarget {
   private static readonly mirror_mode_cycle: AnimationMirrorExportMode[] = ['none', 'mirrored', 'both']
 
   private static readonly mirror_mode_icons: Record<AnimationMirrorExportMode, string> = {
-    none: '/images/icons/mirror.svg',
-    mirrored: '/images/icons/mirror.svg',
-    both: '/images/icons/mirror-both.svg'
+    none: public_asset_url('images/icons/mirror.svg'),
+    mirrored: public_asset_url('images/icons/mirror.svg'),
+    both: public_asset_url('images/icons/mirror-both.svg')
   }
 
   constructor (filter_input_id: string, animation_list_container_id: string, theme_manager: ThemeManager, skeleton_type: SkeletonType) {
@@ -304,7 +305,7 @@ export class AnimationSearch extends EventTarget {
 
       const preview_data_src_attribute = is_custom_animation
         ? ''
-        : ` data-src="../animpreviews/${preview_folder}/${theme_name}_${anim_name}.mp4"`
+        : ` data-src="${public_asset_url('animpreviews/')}${preview_folder}/${theme_name}_${anim_name}.mp4"`
 
       const custom_animation_badge_html = is_custom_animation
         ? '<span class="anim-custom-badge" title="Custom animation" aria-label="Custom animation">C</span>'

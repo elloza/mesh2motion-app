@@ -6,6 +6,7 @@ import { CustomSkeletonHelper } from '../../lib/CustomSkeletonHelper.ts'
 import { DOMUtilities } from '../../lib/DOMUtilities.ts'
 import type GLTFResult from '../../lib/processes/load-skeleton/interfaces/GLTFResult.ts'
 import { ModalDialog } from '../../lib/ModalDialog.ts'
+import { public_asset_url } from '../../lib/PublicAssetUrl.ts'
 
 export class StepLoadSourceSkeleton extends EventTarget {
   private readonly loader: GLTFLoader = new GLTFLoader() // all skeletons are in GLB format
@@ -46,7 +47,7 @@ export class StepLoadSourceSkeleton extends EventTarget {
     // Set the skeleton type to human and load it automatically
     this.skeleton_type = SkeletonType.Human
     const rig_file = RigConfig.rig_file_for(SkeletonType.Human) ?? ''
-    this.load_skeleton_from_path(`/${rig_file}`).catch((error) => {
+    this.load_skeleton_from_path(public_asset_url(rig_file)).catch((error) => {
       console.error('Failed to load default human skeleton:', error)
     })
 
@@ -74,7 +75,7 @@ export class StepLoadSourceSkeleton extends EventTarget {
 
     // Load the selected skeleton using the rig file path from RigConfig
     const rig_file = RigConfig.rig_file_for(this.skeleton_type) ?? ''
-    this.load_skeleton_from_path(`/${rig_file}`).catch((error) => {
+    this.load_skeleton_from_path(public_asset_url(rig_file)).catch((error) => {
       console.error('Failed to load skeleton:', error)
     })
 

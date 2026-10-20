@@ -87,6 +87,29 @@ nav a, nav span {
     line-height: 100%;
 }
 
+/* subtitle under the logo marking this build as a fork */
+nav #logo-branding {
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 1px;
+}
+
+nav #logo-branding img {
+    height: 24px;
+    width: auto;
+}
+
+nav #logo-branding .fork-subtitle {
+    height: auto;
+    padding: 0;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
 nav .active-nav-item, nav a:hover {
     background: var(--nav-active-item-bg);
     text-decoration: none;

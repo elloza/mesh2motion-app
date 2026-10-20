@@ -4,6 +4,7 @@ import { SkeletonType } from '../lib/enums/SkeletonType'
 import { Mesh2MotionEngine } from '../Mesh2MotionEngine'
 import { ModelVariationSwitcher } from '../lib/processes/animations-listing/ModelVariationSwitcher'
 import { RigConfig } from '../lib/RigConfig'
+import { public_asset_url } from '../lib/PublicAssetUrl'
 
 export class MarketingBootstrap {
   private mesh2motion_engine: Mesh2MotionEngine
@@ -48,7 +49,7 @@ export class MarketingBootstrap {
         // if we previously swapped a variation model into scene, clear it first
         this.mesh2motion_engine.animations_listing_step.clear_variation_model_from_scene()
         this.mesh2motion_engine.load_model_step.clear_loaded_model_data()
-        this.mesh2motion_engine.load_model_step.load_model_file('../' + rig.model_file, 'glb')
+        this.mesh2motion_engine.load_model_step.load_model_file(public_asset_url(rig.model_file), 'glb')
         this.skeleton_type = rig.skeleton_type
         this.change_active_skeleton(model_button)
         this.model_variation_switcher.update_for_rig(rig.skeleton_type)
@@ -102,14 +103,14 @@ export class MarketingBootstrap {
       const rig_file = RigConfig.rig_file_for(this.skeleton_type)
       this.mesh2motion_engine.process_step_changed(ProcessStep.LoadSkeleton)
       if (rig_file !== undefined) {
-        this.mesh2motion_engine.load_skeleton_step.load_skeleton_file('../' + rig_file)
+        this.mesh2motion_engine.load_skeleton_step.load_skeleton_file(public_asset_url(rig_file))
       }
       this.mesh2motion_engine.load_skeleton_step.set_skeleton_type(this.skeleton_type)
     })
 
     // need to automatically finish the edit skeleton step and move onto the next step
     this.mesh2motion_engine.load_skeleton_step.addEventListener('skeletonLoaded', () => {
-      this.mesh2motion_engine.animations_listing_step.set_animations_file_path('../animations/')
+      this.mesh2motion_engine.animations_listing_step.set_animations_file_path(public_asset_url('animations/'))
       this.mesh2motion_engine.process_step_changed(ProcessStep.BindPose)
     })
   }
