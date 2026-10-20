@@ -5,7 +5,7 @@ import { TransformSpace } from './enums/TransformSpace'
 import { Utility } from './Utilities'
 import { ModelCleanupUtility } from './processes/load-model/ModelCleanupUtility'
 import { ModelAnalysisReport } from './processes/load-model/ModelAnalysisReport'
-import { DownloadSuccessDialog } from './components/download-success/DownloadSuccessDialog'
+import { ExportProgressOverlay } from './components/export-progress/ExportProgressOverlay'
 import { ModalDialog } from './ModalDialog.ts'
 import { ExportContents } from './processes/export-to-file/DownloadSettings.ts'
 import { type Bone, type Material, type MeshBasicMaterial, type MeshPhongMaterial, type MeshStandardMaterial } from 'three'
@@ -14,6 +14,7 @@ export class EventListeners {
   // Track the pointer that started canvas drag so touch/pencil moves stay consistent
   // and we can ignore unrelated pointers before releasing capture on pointerup/cancel.
   private active_canvas_pointer_id: number | null = null
+  private readonly export_progress: ExportProgressOverlay = new ExportProgressOverlay()
 
   constructor (private readonly bootstrap: Mesh2MotionEngine) {}
 
@@ -289,39 +290,7 @@ export class EventListeners {
     })
 
     this.bootstrap.ui.dom_export_button?.addEventListener('click', () => {
-      const all_clips = this.bootstrap.animations_listing_step.animation_clips()
-      const export_selections = this.bootstrap.animations_listing_step.get_animation_export_selections()
-
-      this.bootstrap.file_export_step.set_animation_clips_to_export(all_clips, export_selections)
-
-      const is_engine_pack = this.bootstrap.download_settings.export_contents() === ExportContents.EnginePack
-      if (is_engine_pack) {
-        // keep the preview animation from moving the bones while the pack is exported in bind pose
-        this.bootstrap.animations_listing_step.is_animation_update_frozen = true
-      }
-
-      const export_promise = is_engine_pack
-        ? this.bootstrap.file_export_step.export_engine_pack(
-          this.bootstrap.animations_listing_step.active_skinned_meshes(),
-          this.bootstrap.load_model_step.get_source_file_name(),
-          this.bootstrap.download_settings
-        ).finally(() => {
-          this.bootstrap.animations_listing_step.is_animation_update_frozen = false
-        })
-        : this.bootstrap.file_export_step.export(
-          this.bootstrap.animations_listing_step.active_skinned_meshes(),
-          'exported-model',
-          this.bootstrap.download_settings
-        )
-
-      void export_promise
-        .then(() => {
-          new DownloadSuccessDialog().show()
-        })
-        .catch((error: unknown) => {
-          const error_message = error instanceof Error ? error.message : 'Failed to export file.'
-          new ModalDialog('Export failed', error_message).show()
-        })
+      void this.export_selected_animations()
     })
 
     // going back to edit skeleton step after skinning
@@ -410,5 +379,53 @@ export class EventListeners {
         this.bootstrap.edit_skeleton_step.redo_bone_transformation()
       }
     })
+  }
+
+  /**
+   * Generate and download the selected animations. Generating can take several
+   * seconds and blocks the page, so a progress overlay is shown (and painted)
+   * first and the download button is disabled until it finishes.
+   */
+  private async export_selected_animations (): Promise<void> {
+    if (this.export_progress.is_visible()) { return } // already exporting
+
+    const export_button = this.bootstrap.ui.dom_export_button
+    const all_clips = this.bootstrap.animations_listing_step.animation_clips()
+    const export_selections = this.bootstrap.animations_listing_step.get_animation_export_selections()
+    this.bootstrap.file_export_step.set_animation_clips_to_export(all_clips, export_selections)
+
+    const is_engine_pack = this.bootstrap.download_settings.export_contents() === ExportContents.EnginePack
+    this.export_progress.show(is_engine_pack ? 'Generating the engine pack…' : 'Generating the file…')
+    if (export_button !== null) { export_button.disabled = true }
+
+    try {
+      await ExportProgressOverlay.wait_until_painted()
+
+      if (is_engine_pack) {
+        // keep the preview animation from moving the bones while the pack is exported in bind pose
+        this.bootstrap.animations_listing_step.is_animation_update_frozen = true
+        try {
+          await this.bootstrap.file_export_step.export_engine_pack(
+            this.bootstrap.animations_listing_step.active_skinned_meshes(),
+            this.bootstrap.load_model_step.get_source_file_name(),
+            this.bootstrap.download_settings
+          )
+        } finally {
+          this.bootstrap.animations_listing_step.is_animation_update_frozen = false
+        }
+      } else {
+        await this.bootstrap.file_export_step.export(
+          this.bootstrap.animations_listing_step.active_skinned_meshes(),
+          'exported-model',
+          this.bootstrap.download_settings
+        )
+      }
+    } catch (error: unknown) {
+      const error_message = error instanceof Error ? error.message : 'Failed to export file.'
+      new ModalDialog('Export failed', error_message).show()
+    } finally {
+      this.export_progress.hide()
+      if (export_button !== null) { export_button.disabled = false }
+    }
   }
 }
