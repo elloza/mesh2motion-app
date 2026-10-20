@@ -1,4 +1,5 @@
 import { SkeletonType } from '../../enums/SkeletonType.ts'
+import { DEFAULT_CHARACTER_HEIGHT_M, is_valid_character_height } from './CharacterHeight.ts'
 
 export enum BoneNamingStructure {
   Default = 'default',
@@ -41,6 +42,15 @@ export class DownloadSettings extends EventTarget {
   private dom_fbx_preset_section: HTMLElement | null = null
   private dom_fbx_preset_group: HTMLElement | null = null
 
+  // character height for FBX downloads (meters). null keeps the size of the model
+  private selected_character_height: number | null = DEFAULT_CHARACTER_HEIGHT_M
+  private model_height: number = 0
+  private dom_character_height_section: HTMLElement | null = null
+  private dom_character_height_input: HTMLInputElement | null = null
+  private dom_character_height_model_button: HTMLButtonElement | null = null
+  private dom_character_height_human_button: HTMLButtonElement | null = null
+  private dom_character_height_hint: HTMLElement | null = null
+
   constructor () {
     super()
     this.initialize_dom_elements()
@@ -62,6 +72,38 @@ export class DownloadSettings extends EventTarget {
 
   public fbx_export_preset (): FbxExportPreset {
     return this.selected_fbx_export_preset
+  }
+
+  /**
+   * Height (meters) the exported FBX character should have, or null to keep the model size
+   */
+  public character_height (): number | null {
+    return this.selected_character_height
+  }
+
+  /**
+   * Tell the settings how tall the model currently is, for the hint and the
+   * "model size" button. Resets the choice to the default height.
+   */
+  public set_model_height (height: number): void {
+    this.model_height = height
+    this.set_character_height(DEFAULT_CHARACTER_HEIGHT_M)
+  }
+
+  private set_character_height (height: number | null): void {
+    this.selected_character_height = height
+    if (this.dom_character_height_input !== null) {
+      const shown_height = height ?? this.model_height
+      this.dom_character_height_input.value = shown_height > 0 ? shown_height.toFixed(2) : ''
+    }
+    if (this.dom_character_height_model_button !== null) {
+      this.dom_character_height_model_button.textContent = this.model_height > 0 ? `Model size (${this.model_height.toFixed(2)} m)` : 'Model size'
+    }
+    if (this.dom_character_height_hint !== null) {
+      this.dom_character_height_hint.textContent = height === null
+        ? 'The model keeps its own size.'
+        : `The character is scaled to ${height.toFixed(2)} m. The Unreal mannequin is 1.80 m.`
+    }
   }
 
   // The download settings popup is available for all skeleton types. The bone naming
@@ -102,6 +144,12 @@ export class DownloadSettings extends EventTarget {
     this.dom_export_format_section = document.querySelector('#download-export-format-section')
     this.dom_fbx_preset_section = document.querySelector('#download-fbx-preset-section')
     this.dom_fbx_preset_group = document.querySelector('#download-fbx-preset-group')
+    this.dom_character_height_section = document.querySelector('#download-character-height-section')
+    this.dom_character_height_input = document.querySelector('#download-character-height')
+    this.dom_character_height_model_button = document.querySelector('#download-character-height-model')
+    this.dom_character_height_human_button = document.querySelector('#download-character-height-human')
+    this.dom_character_height_hint = document.querySelector('#download-character-height-hint')
+    this.set_character_height(this.selected_character_height)
   }
 
   private add_event_listeners (): void {
@@ -188,6 +236,23 @@ export class DownloadSettings extends EventTarget {
       this.update_fbx_preset_ui_visibility()
     })
 
+    this.dom_character_height_input?.addEventListener('change', () => {
+      const value = parseFloat(this.dom_character_height_input?.value ?? '')
+      if (is_valid_character_height(value)) {
+        this.set_character_height(value)
+      } else {
+        this.set_character_height(this.selected_character_height) // put the last valid value back
+      }
+    })
+
+    this.dom_character_height_human_button?.addEventListener('click', () => {
+      this.set_character_height(DEFAULT_CHARACTER_HEIGHT_M)
+    })
+
+    this.dom_character_height_model_button?.addEventListener('click', () => {
+      this.set_character_height(null)
+    })
+
     this.dom_fbx_preset_group?.addEventListener('change', (event: Event) => {
       const selected_radio = event.target as HTMLInputElement | null
 
@@ -216,6 +281,10 @@ export class DownloadSettings extends EventTarget {
     const is_engine_pack = this.selected_export_contents === ExportContents.EnginePack
     const should_show_fbx_preset = this.selected_export_format === ExportFormat.FBX || is_engine_pack
     this.dom_fbx_preset_section.hidden = !should_show_fbx_preset
+    // the character height applies to FBX files
+    if (this.dom_character_height_section !== null) {
+      this.dom_character_height_section.hidden = !should_show_fbx_preset
+    }
 
     if (this.dom_export_format_section !== null) {
       this.dom_export_format_section.hidden = is_engine_pack

@@ -434,6 +434,27 @@ button:disabled {
     padding: 0.3rem 0.6rem;
 }
 
+.download-character-height-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.download-character-height-row input {
+  width: 4.5rem;
+}
+
+.download-character-height-row button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.download-settings-hint {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
 #download-fbx-preset-group {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

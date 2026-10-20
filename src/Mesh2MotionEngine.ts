@@ -18,6 +18,7 @@ import { MeshDragBonePlacement } from './lib/processes/edit-skeleton/MeshDragBon
 import { StepAnimationsListing } from './lib/processes/animations-listing/StepAnimationsListing.ts'
 import { ArmExtensionControl } from './lib/processes/animations-listing/ArmExtensionControl.ts'
 import { DownloadSettings } from './lib/processes/export-to-file/DownloadSettings.ts'
+import { measure_character_height } from './lib/processes/export-to-file/CharacterHeight.ts'
 import { StepExportToFile } from './lib/processes/export-to-file/StepExportToFile.ts'
 import { StepWeightSkin } from './lib/processes/weight-skin/StepWeightSkin.ts'
 
@@ -441,6 +442,8 @@ export class Mesh2MotionEngine {
       // download options for export currently will only work for humanoid skeletons
       // since we will give options to change the bone names to other standard formats.
       this.download_settings.update_download_settings_ui_visibility(active_skeleton_type)
+      // FBX downloads scale the character to a chosen height (1.80 m by default)
+      this.download_settings.set_model_height(measure_character_height(this.weight_skin_step.final_skinned_meshes()))
 
       // update reference of skeleton helper to use the final skinned mesh
       this.regenerate_skeleton_helper(this.weight_skin_step.skeleton())
