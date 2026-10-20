@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="./dialog.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="./settings-dropdown.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="./offline.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="./lib/processes/edit-skeleton/auto-fit/auto-fit.css" crossorigin="anonymous" />
     <link rel="stylesheet" href="./lib/processes/animations-listing/props/props.css" crossorigin="anonymous" />
 
 
@@ -206,6 +207,45 @@
           <!-- reference image for people to see example of rig fitting on a model -->
           <div id="skeleton-template-image" class="skeleton-template-image-clickable">
               <img class="skeleton-template-image-preview ignore-filters" src="images/icons/zoom.svg" alt="Preview image" width="20" height="20" />
+          </div>
+
+          <!-- Auto Fit Skeleton: only shown for the human rig -->
+          <div id="auto-fit-container" class="auto-fit-container" style="display: none;">
+            <div class="auto-fit-row">
+              <button id="auto-fit-button" type="button" class="secondary-button">Auto Fit Skeleton</button>
+              <button id="auto-fit-cancel-button" type="button" class="no-style-button" hidden>Cancel</button>
+              <img data-tippy-content="Estimates joint positions from the shape of the model. Works best with a single character standing in an A-pose or T-pose, facing the front. Review shoulders, elbows, knees and wrists before exporting." src="images/icons/help.svg" alt="Help" width="20" height="20" />
+            </div>
+
+            <p id="auto-fit-status" class="auto-fit-status" role="status" aria-live="polite"></p>
+            <ul id="auto-fit-warnings" class="auto-fit-warnings"></ul>
+
+            <div id="auto-fit-review-actions" class="auto-fit-row" hidden>
+              <button id="auto-fit-apply-button" type="button">Apply</button>
+              <button id="auto-fit-discard-button" type="button" class="secondary-button">Discard</button>
+            </div>
+
+            <details class="auto-fit-options">
+              <summary>Auto Fit options</summary>
+              <div class="auto-fit-options-grid">
+              <label for="auto-fit-pose-select">Pose</label>
+              <select id="auto-fit-pose-select">
+                <option value="auto" selected>Auto</option>
+                <option value="a-pose">A-pose</option>
+                <option value="t-pose">T-pose</option>
+              </select>
+              <label for="auto-fit-facing-select">Facing</label>
+              <select id="auto-fit-facing-select">
+                <option value="auto" selected>Auto</option>
+                <option value="front">Front</option>
+                <option value="back">Back</option>
+              </select>
+              <div class="styled-checkbox">
+                <input type="checkbox" id="auto-fit-symmetry-checkbox" checked />
+                <label for="auto-fit-symmetry-checkbox">Symmetry</label>
+              </div>
+              </div>
+            </details>
           </div>
 
           <div style="display: flex; flex-direction: column;">

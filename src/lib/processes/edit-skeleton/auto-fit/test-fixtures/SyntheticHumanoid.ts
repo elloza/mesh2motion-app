@@ -1,4 +1,4 @@
-import {
+﻿import {
   BoxGeometry,
   CapsuleGeometry,
   CylinderGeometry,
@@ -41,6 +41,7 @@ export interface HumanoidProportions {
   upper_arm_radius: number
   forearm_length: number
   forearm_radius: number
+  wrist_radius: number
   hand_length: number
   hand_width: number
   hand_thickness: number
@@ -70,8 +71,9 @@ export const ADULT_PROPORTIONS: HumanoidProportions = {
   upper_arm_radius: 0.035,
   forearm_length: 0.15,
   forearm_radius: 0.028,
+  wrist_radius: 0.018,
   hand_length: 0.10,
-  hand_width: 0.05,
+  hand_width: 0.06,
   hand_thickness: 0.02,
   neck_top: 0.87,
   neck_radius: 0.035,
@@ -100,8 +102,9 @@ export const CHIBI_PROPORTIONS: HumanoidProportions = {
   upper_arm_radius: 0.04,
   forearm_length: 0.09,
   forearm_radius: 0.035,
+  wrist_radius: 0.024,
   hand_length: 0.07,
-  hand_width: 0.055,
+  hand_width: 0.07,
   hand_thickness: 0.025,
   neck_top: 0.61,
   neck_radius: 0.05,
@@ -132,6 +135,16 @@ function limb (start: Vector3, end: Vector3, radius: number, name: string): Mesh
   const direction = end.clone().sub(start)
   const length = direction.length()
   const mesh = new Mesh(new CapsuleGeometry(radius, length, 4, 12), material)
+  mesh.name = name
+  mesh.position.copy(start).add(end).multiplyScalar(0.5)
+  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
+  return mesh
+}
+
+// open cylinder that narrows from start to end, like a forearm towards the wrist
+function tapered_limb (start: Vector3, end: Vector3, start_radius: number, end_radius: number, name: string): Mesh {
+  const direction = end.clone().sub(start)
+  const mesh = new Mesh(new CylinderGeometry(end_radius, start_radius, direction.length(), 16, 1, true), material)
   mesh.name = name
   mesh.position.copy(start).add(end).multiplyScalar(0.5)
   mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
@@ -170,7 +183,8 @@ export function build_synthetic_humanoid (options: SyntheticHumanoidOptions = {}
   add(torso)
 
   truth.pelvis = new Vector3(0, p.hip * h, 0)
-  truth.neck = new Vector3(0, p.torso_top * h, 0)
+  // like the Mesh2Motion rig, neck_01 starts at the base of the neck, level with the shoulders
+  truth.neck = new Vector3(0, p.shoulder * h, 0)
 
   if (!omit.includes('head')) {
     const neck_start = new Vector3(0, (p.torso_top - 0.01) * h, 0)
@@ -184,7 +198,9 @@ export function build_synthetic_humanoid (options: SyntheticHumanoidOptions = {}
     head.name = 'head'
     head.position.set(0, h - p.head_radius * h, 0)
     add(head)
-    truth.head = new Vector3(0, p.neck_top * h, 0)
+    // head bone in the middle of the visible neck, see HumanJointEstimator PROPORTIONS
+    const head_bottom = 1 - 2 * p.head_radius
+    truth.head = new Vector3(0, (p.torso_top + Math.min(p.neck_top, head_bottom)) / 2 * h, 0)
   }
 
   // legs. side = +1 for left (+X), -1 for right
@@ -222,12 +238,13 @@ export function build_synthetic_humanoid (options: SyntheticHumanoidOptions = {}
     const finger_tip = wrist.clone().addScaledVector(direction, p.hand_length * h)
 
     add(limb(shoulder, elbow, p.upper_arm_radius * h, `upperarm_${suffix}`))
-    add(limb(elbow, wrist, p.forearm_radius * h, `forearm_${suffix}`))
+    add(tapered_limb(elbow, wrist, p.forearm_radius * h, p.wrist_radius * h, `forearm_${suffix}`))
     add(box_between(wrist, finger_tip, p.hand_thickness * h, p.hand_width * h, `hand_${suffix}`))
 
     truth[`shoulder_${suffix}`] = shoulder
     truth[`elbow_${suffix}`] = elbow
     truth[`wrist_${suffix}`] = wrist
+    truth[`fingertip_${suffix}`] = finger_tip
 
     if (options.with_sword === true && suffix === 'r') {
       const grip = wrist.clone().addScaledVector(direction, p.hand_length * h * 0.5)

@@ -414,6 +414,8 @@ export class Mesh2MotionEngine {
 
       this.regenerate_skeleton_helper(this.edit_skeleton_step.skeleton())
       process_step = ProcessStep.EditSkeleton
+      const model_was_rigged = (this.load_model_step.get_import_analysis()?.imported.skinned_mesh_count ?? 0) > 0
+      this.edit_skeleton_step.set_auto_fit_source(this.load_model_step.model_meshes(), model_was_rigged)
       this.edit_skeleton_step.begin(this.scene, this.load_skeleton_step.skeleton_type())
       this.update_edit_bone_interaction_mode()
       this.transform_controls.setMode(this.transform_controls_type) // 'translate', 'rotate'
@@ -436,7 +438,8 @@ export class Mesh2MotionEngine {
       this.process_step = ProcessStep.AnimationsListing
 
       const active_skeleton_type: SkeletonType = this.load_skeleton_step.skeleton_type()
-      this.animations_listing_step.begin(active_skeleton_type, this.load_skeleton_step.skeleton_scale())
+      // Auto Fit can resize the skeleton after the scale slider, so ask the edit step for the scale to use
+      this.animations_listing_step.begin(active_skeleton_type, this.edit_skeleton_step.animation_position_scale(this.load_skeleton_step.skeleton_scale()))
 
       // download options for export currently will only work for humanoid skeletons
       // since we will give options to change the bone names to other standard formats.
